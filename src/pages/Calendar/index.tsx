@@ -14,7 +14,7 @@ import Flatpickr from "react-flatpickr";
 // Redux
 import { useSelector, useDispatch } from "react-redux";
 import {
-    getCalendarData as onGetCalendarData, 
+    getCalendarData as onGetCalendarData,
     createAppointment as onCreateAppointment,
     fetchAvailability as onFetchAvailability,
     clearSlots,
@@ -47,10 +47,10 @@ const Calendar = () => {
         }
     }, [isAppointmentCreated, modal]);
 
+    // ✅ PASO 1: Simplificamos la función toggle. Ya no resetea el formulario.
     const toggle = () => {
         setModal(!modal);
         setShowNewClientForm(false);
-        if(!modal) validation.resetForm();
     };
 
     const handleDateClick = (arg: any) => {
@@ -58,9 +58,15 @@ const Calendar = () => {
         if (nextAvailableStylist?.id) {
             validation.setFieldValue("stylist_id", nextAvailableStylist.id);
         }
-        toggle();
+        toggle(); // Llama al toggle simplificado
     };
 
+    // ✅ PASO 2: Creamos una nueva función para el botón "Crear Nueva Cita"
+    const handleNewAppointmentClick = () => {
+        validation.resetForm(); // Resetea el formulario a sus valores iniciales
+        toggle(); // Abre el modal
+    };
+    
     const validation = useFormik({
         enableReinitialize: true,
         initialValues: {
@@ -90,13 +96,20 @@ const Calendar = () => {
                 
                 if (!finalClientId) throw new Error("ID de cliente no válido.");
                 
+                const localDateTimeString = `${new Date(values.date).toISOString().slice(0, 10)}T${values.start_time}`;
+                const localDate = new Date(localDateTimeString);
+                const utcDateTimeString = localDate.toISOString();
+
                 await dispatch(onCreateAppointment({
-                    client_id: finalClientId, service_id: values.service_id,
-                    stylist_id: values.stylist_id, start_time: `${new Date(values.date).toISOString().slice(0, 10)}T${values.start_time}`
+                    client_id: finalClientId,
+                    service_id: values.service_id,
+                    stylist_id: values.stylist_id,
+                    start_time: utcDateTimeString
                 }));
                 toast.success("¡Cita creada con éxito!");
             } catch (error: any) {
-                toast.error(error?.error || "No se pudo completar la operación.");
+                const errorMessage = error?.error || "No se pudo completar la operación.";
+                toast.error(errorMessage);
             } finally {
                 setSubmitting(false);
             }
@@ -136,7 +149,8 @@ const Calendar = () => {
                         <Col xl={3}>
                             <Card>
                                 <CardBody>
-                                    <Button color="primary" className="w-100" onClick={toggle}>
+                                    {/* ✅ PASO 3: El botón ahora llama a la nueva función */}
+                                    <Button color="primary" className="w-100" onClick={handleNewAppointmentClick}>
                                         <i className="mdi mdi-plus"></i> Crear Nueva Cita
                                     </Button>
                                 </CardBody>
@@ -179,15 +193,16 @@ const Calendar = () => {
                 <ModalHeader toggle={toggle} tag="h5" className="p-3 bg-light">Agendar Cita</ModalHeader>
                 <ModalBody>
                     <Form onSubmit={validation.handleSubmit}>
+                        {/* El resto del formulario no cambia */}
                         <Row>
                             <Col xs={12} className="mb-3">
                                 {showNewClientForm ? (
                                     <div>
                                         <h5>Datos del Nuevo Cliente</h5>
                                         <Row>
-                                            <Col md={6}><Label>Nombre*</Label><Input name="newClientFirstName" onChange={validation.handleChange} value={validation.values.newClientFirstName} invalid={!!validation.errors.newClientFirstName} /></Col>
+                                            <Col md={6}><Label>Nombre*</Label><Input name="newClientFirstName" onChange={validation.handleChange} value={validation.values.newClientFirstName} invalid={!!validation.errors.newClientFirstName && validation.touched.newClientFirstName} /></Col>
                                             <Col md={6}><Label>Apellido</Label><Input name="newClientLastName" onChange={validation.handleChange} value={validation.values.newClientLastName} /></Col>
-                                            <Col md={6}><Label>Email*</Label><Input name="newClientEmail" type="email" onChange={validation.handleChange} value={validation.values.newClientEmail} invalid={!!validation.errors.newClientEmail} /></Col>
+                                            <Col md={6}><Label>Email*</Label><Input name="newClientEmail" type="email" onChange={validation.handleChange} value={validation.values.newClientEmail} invalid={!!validation.errors.newClientEmail && validation.touched.newClientEmail} /></Col>
                                             <Col md={6}><Label>Teléfono</Label><Input name="newClientPhone" onChange={validation.handleChange} value={validation.values.newClientPhone} /></Col>
                                         </Row>
                                         <Button color="link" size="sm" onClick={() => setShowNewClientForm(false)} className="ps-0">O seleccionar cliente existente</Button>
@@ -195,7 +210,7 @@ const Calendar = () => {
                                 ) : (
                                     <div>
                                         <Label>Cliente Existente*</Label>
-                                        <Input type="select" name="client_id" onChange={validation.handleChange} value={validation.values.client_id} invalid={!!validation.errors.client_id}>
+                                        <Input type="select" name="client_id" onChange={validation.handleChange} value={validation.values.client_id} invalid={!!validation.errors.client_id && validation.touched.client_id}>
                                             <option value="">Seleccione...</option>
                                             {clients.map((c: any) => <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>)}
                                         </Input>
@@ -206,7 +221,7 @@ const Calendar = () => {
                             
                             <Col md={12} className="mb-3">
                                 <Label>Servicio*</Label>
-                                <Input type="select" name="service_id" onChange={validation.handleChange} value={validation.values.service_id} invalid={!!validation.errors.service_id}>
+                                <Input type="select" name="service_id" onChange={validation.handleChange} value={validation.values.service_id} invalid={!!validation.errors.service_id && validation.touched.service_id}>
                                     <option value="">Seleccione un servicio...</option>
                                     {services.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
                                 </Input>
@@ -224,7 +239,7 @@ const Calendar = () => {
                              <Col md={6} className="mb-3">
                                 <Label>Estilista*</Label>
                                 <div className="d-flex">
-                                    <Input type="select" name="stylist_id" onChange={validation.handleChange} value={validation.values.stylist_id} className="me-2" invalid={!!validation.errors.stylist_id}>
+                                    <Input type="select" name="stylist_id" onChange={validation.handleChange} value={validation.values.stylist_id} className="me-2" invalid={!!validation.errors.stylist_id && validation.touched.stylist_id}>
                                         <option value="">Seleccione o use el turnero...</option>
                                         {stylists.map((s: any) => <option key={s.id} value={s.id}>{s.first_name} {s.last_name}</option>)}
                                     </Input>
@@ -237,7 +252,7 @@ const Calendar = () => {
                             <Col xs={12} className="mb-3">
                                 <Label>Horarios Disponibles*</Label>
                                 {isSlotLoading ? <Spinner size="sm" /> :
-                                    <Input type="select" name="start_time" onChange={validation.handleChange} value={validation.values.start_time} disabled={availableSlots.length === 0} invalid={!!validation.errors.start_time}>
+                                    <Input type="select" name="start_time" onChange={validation.handleChange} value={validation.values.start_time} disabled={availableSlots.length === 0} invalid={!!validation.errors.start_time && validation.touched.start_time}>
                                         <option value="">{availableSlots.length > 0 ? "Seleccione un horario..." : "Seleccione estilista y fecha"}</option>
                                         {availableSlots.map((slot: string) => {
                                             const time = slot.slice(11, 16); // Formato HH:MM
@@ -249,7 +264,7 @@ const Calendar = () => {
                             </Col>
                         </Row>
                         <div className="hstack gap-2 justify-content-end">
-                            <Button type="button" light onClick={toggle}>Cancelar</Button>
+                            <Button type="button" color="light" onClick={toggle}>Cancelar</Button>
                             <Button type="submit" color="success" disabled={!validation.isValid || validation.isSubmitting}>
                                 {validation.isSubmitting ? <Spinner size="sm" /> : "Agendar Cita"}
                             </Button>

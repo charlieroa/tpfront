@@ -30,19 +30,18 @@ export const isUserAuthenticated = () => {
 
 export const postJwtLogin = async (data: any) => {
   try {
-    // 1. Creamos una instancia de axios LIMPIA, sin interceptores.
-    const cleanAxios = axios.create();
+    // Creamos instancia de axios con baseURL desde .env
+    const cleanAxios = axios.create({
+      baseURL: process.env.REACT_APP_API_URL,
+      withCredentials: true,
+    });
 
-    // 2. Hacemos la llamada con la URL COMPLETA.
-    const response = await cleanAxios.post(
-      "http://localhost:3000/api/auth/login",
-      {
-        email: data.email,
-        password: data.password,
-      }
-    );
+    // Llamamos al endpoint sin hardcodear URL completa
+    const response = await cleanAxios.post("/auth/login", {
+      email: data.email,
+      password: data.password,
+    });
 
-    // 3. Trabajamos con la respuesta original de axios
     const responseData = response.data;
 
     if (responseData && responseData.token) {
@@ -58,13 +57,14 @@ export const postJwtLogin = async (data: any) => {
       return authUser;
     }
 
-    throw new Error("La respuesta de la API (limpia) no incluyó un token.");
+    throw new Error("La respuesta de la API no incluyó un token.");
 
   } catch (error: any) {
-    console.error("Error en postJwtLogin (con axios limpio):", error.response?.data || error.message);
+    console.error("Error en postJwtLogin:", error.response?.data || error.message);
     throw error.response?.data || error;
   }
 };
+
 
 
 // ================================================================

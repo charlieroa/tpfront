@@ -26,16 +26,21 @@ const getApiConfig = () => {
 
 /**
  * Carga TODOS los datos iniciales necesarios para el calendario y el modal.
+ * MODIFICADO: Ahora carga las citas de TODO EL AÑO ACTUAL.
  */
 export const getCalendarData = () => async (dispatch: any) => {
     dispatch(getCalendarDataStart());
     try {
         const { headers, tenantId } = getApiConfig();
+        
+        // ✅ AJUSTE: Se calcula el inicio y fin del año actual.
         const today = new Date();
-        const startDate = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
-        const endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
+        const year = today.getFullYear();
+        const startDate = new Date(year, 0, 1).toISOString().split('T')[0];    // 1 de Enero
+        const endDate = new Date(year, 11, 31).toISOString().split('T')[0]; // 31 de Diciembre
 
         const [appointments, clientsRes, servicesRes, allStylistsRes, nextStylistRes] = await Promise.all([
+            // La petición a la API ahora usa el rango de todo el año
             axios.get(`http://localhost:3000/api/appointments/tenant/${tenantId}`, { headers, params: { startDate, endDate } }),
             axios.get(`http://localhost:3000/api/users/tenant/${tenantId}?role_id=4`, { headers }),
             axios.get(`http://localhost:3000/api/services/tenant/${tenantId}`, { headers }),
@@ -43,7 +48,6 @@ export const getCalendarData = () => async (dispatch: any) => {
             axios.get(`http://localhost:3000/api/stylists/next-available`, { headers })
         ]);
 
-        // ✅ CORRECCIÓN: Usamos las respuestas directamente, sin .data, debido a tu interceptor de Axios
         const formattedEvents = (Array.isArray(appointments) ? appointments : []).map((cita: any) => ({
             id: cita.id,
             title: `${cita.service_name} - ${cita.client_first_name || ''}`,
@@ -65,73 +69,72 @@ export const getCalendarData = () => async (dispatch: any) => {
     }
 };
 
+
+// ... El resto del archivo no cambia ...
+
 /**
- * Busca los horarios disponibles para un estilista y fecha específicos.
- */
+ * Busca los horarios disponibles para un estilista y fecha específicos.
+ */
 export const fetchAvailability = (stylistId: string, date: string) => async (dispatch: any) => {
-    try {
-        const { headers, tenantId } = getApiConfig();
-        // 'response' es el objeto completo de Axios: { data: { availableSlots: [...] }, status, ... }
-        const response = await axios.get(`http://localhost:3000/api/appointments/availability`, { 
-            headers, 
-            params: { tenant_id: tenantId, stylist_id: stylistId, date }
-        });
-        
-        // ✅ ¡ESTA ES LA CORRECCIÓN FINAL! Accedemos a .data y LUEGO a .availableSlots
-        const slots = response.data.availableSlots || [];
-        
-        dispatch(fetchSlotsSuccess(slots));
-    } catch (error: any) {
-        dispatch(fetchSlotsFail(error.message || "Error al buscar horarios"));
-    }
+    try {
+        const { headers, tenantId } = getApiConfig();
+        const response = await axios.get(`http://localhost:3000/api/appointments/availability`, { 
+            headers, 
+            params: { tenant_id: tenantId, stylist_id: stylistId, date }
+        });
+        
+        const slots = response.data.availableSlots || [];
+        dispatch(fetchSlotsSuccess(slots));
+    } catch (error: any) {
+        dispatch(fetchSlotsFail(error.message || "Error al buscar horarios"));
+    }
 };
 
 /**
- * Crea un nuevo cliente.
- */
+ * Crea un nuevo cliente.
+ */
 export const createNewClient = (clientData: any) => async (dispatch: any) => {
-    try {
-        const { headers, tenantId } = getApiConfig();
-        const dataToSend = { ...clientData, tenant_id: tenantId, role_id: 4 };
-        const newClient = await axios.post(`http://localhost:3000/api/users`, dataToSend, { headers });
-        dispatch(createNewClientSuccess(newClient));
-        return Promise.resolve(newClient);
-    } catch (error: any) {
-        dispatch(createNewClientFail(error));
-        return Promise.reject(error.response?.data || error);
-    }
+    try {
+        const { headers, tenantId } = getApiConfig();
+        const dataToSend = { ...clientData, tenant_id: tenantId, role_id: 4 };
+        const newClient = await axios.post(`http://localhost:3000/api/users`, dataToSend, { headers });
+        dispatch(createNewClientSuccess(newClient));
+        return Promise.resolve(newClient);
+    } catch (error: any) {
+        dispatch(createNewClientFail(error));
+        return Promise.reject(error.response?.data || error);
+    }
 };
 
 /**
- * Crea una nueva cita.
- */
+ * Crea una nueva cita.
+ */
 export const createAppointment = (appointmentData: any) => async (dispatch: any) => {
-    try {
-        const { headers } = getApiConfig();
-        // Aquí la respuesta de un POST sí suele ser el objeto completo de Axios
-        const newAppointmentResponse = await axios.post(`http://localhost:3000/api/appointments`, appointmentData, { headers });
-        const newAppointmentData = newAppointmentResponse.data;
+    try {
+        const { headers } = getApiConfig();
+        const newAppointmentResponse = await axios.post(`http://localhost:3000/api/appointments`, appointmentData, { headers });
+        const newAppointmentData = newAppointmentResponse.data;
 
-        const formattedNewEvent = {
-            id: newAppointmentData.id,
-            title: `${newAppointmentData.service_name} - ${newAppointmentData.client_first_name || ''}`,
-            start: newAppointmentData.start_time,
-            end: newAppointmentData.end_time,
-            className: `bg-success-subtle`,
-            extendedProps: { ...newAppointmentData }
-        };
+        const formattedNewEvent = {
+            id: newAppointmentData.id,
+            title: `${newAppointmentData.service_name} - ${newAppointmentData.client_first_name || ''}`,
+            start: newAppointmentData.start_time,
+            end: newAppointmentData.end_time,
+            className: `bg-success-subtle`,
+            extendedProps: { ...newAppointmentData }
+        };
 
-        dispatch(createAppointmentSuccess(formattedNewEvent));
-        return Promise.resolve(newAppointmentData);
-    } catch (error: any) {
-        dispatch(createAppointmentFail(error));
-        return Promise.reject(error.response?.data || error);
-    }
+        dispatch(createAppointmentSuccess(formattedNewEvent));
+        return Promise.resolve(newAppointmentData);
+    } catch (error: any) {
+        dispatch(createAppointmentFail(error));
+        return Promise.reject(error.response?.data || error);
+    }
 };
 
 /**
- * Thunk para limpiar los horarios disponibles.
- */
+ * Thunk para limpiar los horarios disponibles.
+ */
 export const clearSlots = () => (dispatch: any) => {
-    dispatch(clearSlotsAction());
+    dispatch(clearSlotsAction());
 };
