@@ -1,3 +1,5 @@
+// Archivo COMPLETO y FINAL: src/slices/calendar/reducer.ts
+
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
 export interface CalendarState {
@@ -5,11 +7,12 @@ export interface CalendarState {
   clients: any[];
   services: any[];
   stylists: any[];
+  categories: any[];
   nextAvailableStylist: any | null;
   availableSlots: string[];
-  error: object;
+  error: object | string;
   loading: boolean;
-  isAppointmentCreated: boolean;
+  // ✅ El flag 'isAppointmentCreated' ha sido ELIMINADO.
 }
 
 export const initialState: CalendarState = {
@@ -17,11 +20,15 @@ export const initialState: CalendarState = {
   clients: [],
   services: [],
   stylists: [],
+  categories: [
+      { id: 1, title: 'Corte', type: 'primary' },
+      { id: 2, title: 'Color', type: 'success' },
+      { id: 3, title: 'Peinado', type: 'info' },
+  ],
   nextAvailableStylist: null,
   availableSlots: [],
   error: {},
   loading: true,
-  isAppointmentCreated: false,
 };
 
 const calendarSlice = createSlice({
@@ -30,7 +37,7 @@ const calendarSlice = createSlice({
   reducers: {
     getCalendarDataStart(state) {
       state.loading = true;
-      state.isAppointmentCreated = false;
+      state.error = {};
     },
     getCalendarDataSuccess(state, action: PayloadAction<any>) {
       state.loading = false;
@@ -54,18 +61,26 @@ const calendarSlice = createSlice({
     clearSlots(state) {
         state.availableSlots = [];
     },
-    createAppointmentSuccess(state, action: PayloadAction<any>) {
-      state.events.push(action.payload);
-      state.isAppointmentCreated = true;
+    // ✅ 'createAppointmentSuccess' ahora puede estar vacío o no existir,
+    // ya que el thunk de recarga de datos es suficiente. Lo mantenemos por si se usa en otro lado.
+    createAppointmentSuccess(state) {
+        // No es necesario hacer nada aquí.
     },
     createAppointmentFail(state, action: PayloadAction<any>) {
       state.error = action.payload;
     },
-    // ✅ ACCIONES PARA EL NUEVO CLIENTE QUE FALTABAN
     createNewClientSuccess(state, action: PayloadAction<any>) {
-        state.clients.push(action.payload); // Añade el nuevo cliente a la lista
+        state.clients.push(action.payload);
     },
     createNewClientFail(state, action: PayloadAction<any>) {
+        state.error = action.payload;
+    },
+    updateAppointmentSuccess(state, action: PayloadAction<any>) {
+        state.events = state.events.map(event =>
+            event.id.toString() === action.payload.id.toString() ? action.payload : event
+        );
+    },
+    updateAppointmentFail(state, action: PayloadAction<any>) {
         state.error = action.payload;
     },
   },
@@ -80,8 +95,10 @@ export const {
   clearSlots,
   createAppointmentSuccess,
   createAppointmentFail,
-  createNewClientSuccess, // ✅ Exportar nueva acción
-  createNewClientFail,    // ✅ Exportar nueva acción
+  createNewClientSuccess,
+  createNewClientFail,
+  updateAppointmentSuccess,
+  updateAppointmentFail
 } = calendarSlice.actions;
 
 export default calendarSlice.reducer;

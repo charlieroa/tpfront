@@ -5,14 +5,22 @@
 // ================================================================
 
 // AUTH
-export const POST_JWT_LOGIN = "/auth/login"; // <-- ¡EL CAMBIO MÁS IMPORTANTE!
+export const POST_JWT_LOGIN = "/auth/login";
 
-// (Añadimos el resto para el futuro)
-// USERS
+// USERS (Clientes, Estilistas)
+export const GET_USERS_BY_TENANT = "/users/tenant"; // Se usará como /users/tenant/:tenantId?role_id=X
+
+// SERVICES
+export const GET_SERVICES_BY_TENANT = "/services/tenant"; // Se usará como /services/tenant/:tenantId
+
+// STYLISTS
+export const GET_NEXT_AVAILABLE_STYLIST = "/stylists/next-available";
+
+// APPOINTMENTS
 export const GET_APPOINTMENTS_BY_TENANT = "/appointments/tenant";
-export const GET_USERS_BY_TENANT = "/users/tenant"; // Se usará como /users/tenant/:tenantId
-export const GET_USER_BY_ID = "/users"; // Se usará como /users/:id
-// ... etc.
+export const GET_AVAILABILITY = "/appointments/availability";
+export const CREATE_APPOINTMENT = "/appointments";
+export const UPDATE_APPOINTMENT = "/appointments";
 
 
 // ================================================================

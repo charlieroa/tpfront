@@ -20,51 +20,75 @@ export const isUserAuthenticated = () => {
 };
 
 
+
 // ================================================================
 // --- NUESTRA LÓGICA DE LOGIN (CORREGIDA) ---
 // ================================================================
 
-// REEMPLAZA la función 'postJwtLogin' con esta versión en fakebackend_helper.ts
-
-
-
 export const postJwtLogin = async (data: any) => {
   try {
-    // Creamos instancia de axios con baseURL desde .env
     const cleanAxios = axios.create({
       baseURL: process.env.REACT_APP_API_URL,
       withCredentials: true,
     });
-
-    // Llamamos al endpoint sin hardcodear URL completa
     const response = await cleanAxios.post("/auth/login", {
       email: data.email,
       password: data.password,
     });
-
     const responseData = response.data;
-
     if (responseData && responseData.token) {
       const authUser = {
         message: "Login Successful",
         token: responseData.token,
         user: { email: data.email },
       };
-
       sessionStorage.setItem("authUser", JSON.stringify(authUser));
       localStorage.setItem("authToken", responseData.token);
-
       return authUser;
     }
-
     throw new Error("La respuesta de la API no incluyó un token.");
-
   } catch (error: any) {
     console.error("Error en postJwtLogin:", error.response?.data || error.message);
     throw error.response?.data || error;
   }
 };
 
+
+// ================================================================
+// --- ✅ NUESTRAS FUNCIONES PARA EL CALENDARIO ---
+// ================================================================
+
+// Obtener citas por tenant y rango de fechas
+export const getAppointmentsByTenant = (tenantId: string, startDate: string, endDate: string) => 
+    api.get(`${url.GET_APPOINTMENTS_BY_TENANT}/${tenantId}`, { params: { startDate, endDate } });
+
+// Obtener usuarios (clientes o estilistas) por tenant y rol
+export const getUsersByTenantAndRole = (tenantId: string, roleId: number) =>
+    api.get(`${url.GET_USERS_BY_TENANT}/${tenantId}`, { params: { role_id: roleId } });
+
+// Obtener servicios por tenant
+export const getServicesByTenant = (tenantId: string) =>
+    api.get(`${url.GET_SERVICES_BY_TENANT}/${tenantId}`, {});
+
+// Obtener el próximo estilista disponible
+export const getNextAvailableStylist = () =>
+    api.get(url.GET_NEXT_AVAILABLE_STYLIST, {});
+
+// Obtener horarios disponibles
+export const getAvailability = (tenantId: string, stylistId: string, date: string) =>
+    api.get(url.GET_AVAILABILITY, { params: { tenant_id: tenantId, stylist_id: stylistId, date } });
+
+// Crear un nuevo usuario (usado para nuevos clientes)
+export const createNewUser = (userData: any) => 
+    api.create("/users", userData);
+
+// Crear una nueva cita
+export const createAppointment = (appointmentData: any) =>
+    api.create(url.CREATE_APPOINTMENT, appointmentData);
+
+// Actualizar una cita existente
+export const updateAppointment = (appointment: any) =>
+    api.put(`${url.UPDATE_APPOINTMENT}/${appointment.id}`, appointment);
 
 
 // ================================================================

@@ -8,8 +8,7 @@ import { Navigate } from "react-router-dom";
 // Dashboard
 import DashboardPrincipal from "../pages/DashboardPrincipal";
 
-
-// Calendario y Caja
+// Calendario
 import Calendar from "../pages/Calendar";
 
 // Estilistas
@@ -20,28 +19,36 @@ import SimplePage from "../pages/Pages/Profile/SimplePage/SimplePage"; // Detall
 import EcommerceProducts from "../pages/Ecommerce/EcommerceProducts/index";
 import EcommerceProductDetail from "../pages/Ecommerce/EcommerceProducts/EcommerceProductDetail";
 
+// --- NUEVA IMPORTACIÓN PARA CHECKOUT ---
+import EcommerceCheckout from "../pages/Ecommerce/EcommerceCheckout"; // Página para finalizar el pago
+
 // Nómina
 import InvoiceList from "../pages/Invoices/InvoiceList";
 
 // Autenticación y Perfil
 import Login from "../pages/Authentication/Login";
 import Logout from "../pages/Authentication/Logout";
-import Register from "../pages/Authentication/Register";
+import Register from "../pages/Authentication/Register"; // Registro de Clientes
 import UserProfile from "../pages/Authentication/user-profile";
-import TenantRegister from "../pages/Authentication/TenantRegister";
+import TenantRegister from "../pages/Authentication/TenantRegister"; // Registro de Dueños
 
 
 // --- NUESTRAS RUTAS PROTEGIDAS ---
 const authProtectedRoutes = [
   // Dashboard
-   { path: "/dashboard", component: <DashboardPrincipal /> },
+  { path: "/dashboard", component: <DashboardPrincipal /> },
 
   // Calendario y Caja
-  { path: "/calendar", component: <Calendar /> }, // Usaremos la misma página para ambas
+  { path: "/calendar", component: <Calendar /> },
+
+  // --- NUEVA RUTA PARA EL PROCESO DE PAGO ---
+  // Haremos que la ruta sea más limpia y semántica
+  { path: "/checkout", component: <EcommerceCheckout /> }, // Ruta genérica
+  { path: "/checkout/:appointmentIds", component: <EcommerceCheckout /> }, // Ruta con IDs de citas
 
   // Estilistas
   { path: "/stylists", component: <CandidateList /> },
-  { path: "/stylists/:id", component: <SimplePage /> }, // Ruta para ver el detalle
+  { path: "/stylists/:id", component: <SimplePage /> },
 
   // Inventario
   { path: "/inventory", component: <EcommerceProducts /> },
@@ -68,8 +75,8 @@ const publicRoutes = [
   // Rutas de Autenticación
   { path: "/logout", component: <Logout /> },
   { path: "/login", component: <Login /> },
-  { path: "/register", component: <Register /> },
-   { path: "/register-tenant", component: <TenantRegister /> },
+  { path: "/register", component: <Register /> }, // Registro de Clientes
+  { path: "/register-tenant", component: <TenantRegister /> }, // Registro de Dueños
 ];
 
 export { authProtectedRoutes, publicRoutes };
