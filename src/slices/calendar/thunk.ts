@@ -150,7 +150,30 @@ export const suggestStylist = (date: string, startTime: string, serviceId: strin
 // ==================================================================
 // FIN DE LA PARTE NUEVA
 // ==================================================================
+export const getStylistsForService = (serviceId: string) => async (dispatch: any) => {
+    if (!serviceId) {
+        return Promise.resolve([]); // Devuelve un array vacío si no hay servicio
+    }
+    try {
+        const { headers } = getApiConfig();
+        const response = await axios.get(
+            `http://localhost:3000/api/services/${serviceId}/stylists`, 
+            { headers }
+        );
 
+        // La respuesta ya debería ser el array de estilistas
+        const stylists = response.data || response;
+        if (Array.isArray(stylists)) {
+            return Promise.resolve(stylists);
+        }
+        return Promise.resolve([]);
+
+    } catch (error: any) {
+        console.error("Error al obtener estilistas por servicio:", error);
+        toast.error("No se pudieron cargar los estilistas para este servicio.");
+        return Promise.reject(error);
+    }
+};
 
 /**
  * Crea un nuevo cliente.
