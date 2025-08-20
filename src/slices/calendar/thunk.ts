@@ -247,3 +247,39 @@ export const updateAppointment = (appointment: any) => async (dispatch: any) => 
 export const clearSlots = () => (dispatch: any) => {
     dispatch(clearSlotsAction());
 };
+
+export const createAppointmentsBatch = (payload: {
+  client_id?: string;                 // opcional si el admin agenda para un cliente
+  appointments: Array<{
+    service_id: string;
+    stylist_id: string;
+    start_time: string;               // ISO UTC: e.g. "2025-10-30T14:00:00.000Z"
+  }>;
+}) => async (dispatch: any) => {
+  try {
+    const { headers } = getApiConfig();
+
+    await axios.post(
+      "http://localhost:3000/api/appointments/batch",
+      payload,
+      { headers }
+    );
+
+    // Recargar calendario y marcar éxito
+    await dispatch(getCalendarData());
+    dispatch(createAppointmentSuccess());
+    toast.success("¡Citas agendadas con éxito!");
+
+    return Promise.resolve();
+  } catch (error: any) {
+    const errorMessage =
+      error.response?.data?.error ||
+      error.response?.data?.message ||
+      error.message ||
+      "No se pudo crear el lote de citas.";
+
+    dispatch(createAppointmentFail(errorMessage));
+    toast.error(errorMessage);
+    return Promise.reject(errorMessage);
+  }
+};

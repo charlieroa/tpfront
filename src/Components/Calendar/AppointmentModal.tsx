@@ -1,38 +1,101 @@
-// ARCHIVO COMPLETO Y CORREGIDO: src/Components/Calendar/AppointmentModal.tsx
+// ARCHIVO COMPLETO Y AJUSTADO: src/Components/Calendar/AppointmentModal.tsx
 import React from "react";
 import { Modal, ModalHeader, ModalBody, Form, Row, Col, Label, Input, Button, Spinner } from "reactstrap";
 import Flatpickr from "react-flatpickr";
 import { FormikProps } from "formik";
 import { AppointmentFormValues } from "../../pages/Calendar/types";
 
-// ✅ INTERFAZ DE PROPS RESTAURADA
+// ✅ INTERFAZ DE PROPS
+interface ExtraRow {
+  service_id: string;
+  stylist_id: string;
+}
+
 interface AppointmentModalProps {
   isOpen: boolean;
   toggle: () => void;
   selectedEvent: any;
+
+  // Formik de la cita principal
   validation: FormikProps<AppointmentFormValues>;
+
+  // Catálogos
   clients: any[];
   services: any[];
+
+  // Estilistas para la cita principal
   filteredStylists: any[];
   isFetchingStylists: boolean;
+
+  // Horarios
   availableSlots: string[];
   timeSlots: string[];
   isSlotLoading: boolean;
+
+  // Sugerencia de estilista
   isSuggesting: boolean;
   handleSuggestStylist: () => void;
+
+  // Cliente nuevo / existente
   showNewClientForm: boolean;
   setShowNewClientForm: (show: boolean) => void;
+
+  // === NUEVO: Campos para servicios adicionales ===
+  extraRows: ExtraRow[];
+  onAddExtraRow: () => void;
+  onRemoveExtraRow: (index: number) => void;
+  onChangeExtraRow: (index: number, field: "service_id" | "stylist_id", value: string) => void;
+
+  // Estilistas por fila extra (mismo índice que extraRows)
+  stylistsForRows: any[][];
+  isFetchingStylistsForRows?: boolean[]; // opcional
 }
 
 const AppointmentModal: React.FC<AppointmentModalProps> = ({
-  isOpen, toggle, selectedEvent, validation, clients, services,
-  filteredStylists, isFetchingStylists, availableSlots, timeSlots,
-  isSlotLoading, isSuggesting, handleSuggestStylist, showNewClientForm, setShowNewClientForm,
+  isOpen, toggle, selectedEvent, validation,
+  clients, services,
+  filteredStylists, isFetchingStylists,
+  availableSlots, timeSlots, isSlotLoading,
+  isSuggesting, handleSuggestStylist,
+  showNewClientForm, setShowNewClientForm,
+
+  // nuevos (multi-servicio)
+  extraRows,
+  onAddExtraRow,
+  onRemoveExtraRow,
+  onChangeExtraRow,
+  stylistsForRows,
+  isFetchingStylistsForRows = [],
 }) => {
+  const isEdit = !!selectedEvent;
+
+  // Render de opciones de hora:
+  const renderTimeOptions = () => {
+    if (isSlotLoading) return <option disabled>Buscando...</option>;
+
+    const source = (availableSlots.length > 0 ? availableSlots : timeSlots);
+    return source.map((slot: string) => {
+      let valueTime: string, displayTime: string;
+      if (availableSlots.length > 0) {
+        const localDate = new Date(slot);
+        valueTime = localDate.toTimeString().slice(0, 8); // HH:mm:ss
+        displayTime = localDate.toTimeString().slice(0, 5); // HH:mm
+      } else {
+        valueTime = slot;
+        displayTime = slot.slice(0, 5);
+      }
+      return (
+        <option key={slot} value={valueTime}>
+          {displayTime}
+        </option>
+      );
+    });
+  };
+
   return (
     <Modal isOpen={isOpen} toggle={toggle} centered size="lg">
       <ModalHeader toggle={toggle} tag="h5" className="p-3 bg-light">
-        {!!selectedEvent ? "Editar Cita" : "Agendar Cita"}
+        {isEdit ? "Editar Cita" : "Agendar Cita"}
       </ModalHeader>
       <ModalBody>
         <Form onSubmit={validation.handleSubmit}>
@@ -84,7 +147,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                   </Button>
                 </div>
               ) : (
-                <div style={{ display: selectedEvent ? "none" : "block" }}>
+                <div style={{ display: isEdit ? "none" : "block" }}>
                   <Label>Cliente Existente*</Label>
                   <Input
                     type="select"
@@ -92,7 +155,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                     onChange={validation.handleChange}
                     value={String(validation.values.client_id)}
                     invalid={!!validation.errors.client_id && !!validation.touched.client_id}
-                    disabled={!!selectedEvent}
+                    disabled={isEdit}
                   >
                     <option value="">Seleccione...</option>
                     {clients.map((c: any) => (
@@ -106,7 +169,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                   </Button>
                 </div>
               )}
-              {selectedEvent && (
+              {isEdit && (
                 <div>
                   <Label>Cliente</Label>
                   <Input type="text" value={`${selectedEvent.client_first_name} ${selectedEvent.client_last_name || ""}`} disabled />
@@ -114,7 +177,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
               )}
             </Col>
 
-            {/* Sección de Servicio */}
+            {/* Sección de Servicio (principal) */}
             <Col md={12} className="mb-3">
               <Label>Servicio*</Label>
               <Input
@@ -133,7 +196,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
               </Input>
             </Col>
 
-            {/* Sección de Fecha y Hora */}
+            {/* Fecha y Hora (principal) */}
             <Col md={6} className="mb-3">
               <Label>Fecha*</Label>
               <Flatpickr
@@ -159,28 +222,11 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                 invalid={!!validation.errors.start_time && !!validation.touched.start_time}
               >
                 <option value="">Seleccione un horario...</option>
-                {isSlotLoading ? (
-                  <option disabled>Buscando...</option>
-                ) : (availableSlots.length > 0 ? availableSlots : timeSlots).map((slot: string) => {
-                  let valueTime: string, displayTime: string;
-                  if (availableSlots.length > 0) {
-                    const localDate = new Date(slot);
-                    valueTime = localDate.toTimeString().slice(0, 8);
-                    displayTime = localDate.toTimeString().slice(0, 5);
-                  } else {
-                    valueTime = slot;
-                    displayTime = slot.slice(0, 5);
-                  }
-                  return (
-                    <option key={slot} value={valueTime}>
-                      {displayTime}
-                    </option>
-                  );
-                })}
+                {renderTimeOptions()}
               </Input>
             </Col>
 
-            {/* Sección de Estilista */}
+            {/* Estilista (principal) */}
             <Col xs={12} className="mb-3">
               <Label>Estilista*</Label>
               <div className="d-flex">
@@ -217,6 +263,77 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                 </Button>
               </div>
             </Col>
+
+            {/* =========================
+                SECCIÓN: Servicios Adicionales
+                ========================= */}
+            {!isEdit && (
+              <Col xs={12} className="mb-2">
+                <div className="d-flex align-items-center justify-content-between">
+                  <h6 className="mb-0">Servicios adicionales</h6>
+                  <Button color="secondary" size="sm" onClick={onAddExtraRow}>
+                    Añadir Servicio
+                  </Button>
+                </div>
+                <small className="text-muted">
+                  Se usarán la misma <strong>fecha</strong> y <strong>hora</strong> de la cita principal.
+                </small>
+              </Col>
+            )}
+
+            {!isEdit && extraRows.map((row, idx) => {
+              const rowStylists = stylistsForRows[idx] || [];
+              const rowLoading = isFetchingStylistsForRows[idx] || false;
+
+              return (
+                <Col xs={12} key={`extra-row-${idx}`} className="border rounded p-3 mb-2">
+                  <Row className="align-items-end">
+                    <Col md={6} className="mb-3">
+                      <Label>Servicio (#{idx + 1})*</Label>
+                      <Input
+                        type="select"
+                        value={String(row.service_id || "")}
+                        onChange={(e) => onChangeExtraRow(idx, "service_id", e.target.value)}
+                      >
+                        <option value="">Seleccione un servicio...</option>
+                        {services.map((s: any) => (
+                          <option key={s.id} value={String(s.id)}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </Input>
+                    </Col>
+                    <Col md={5} className="mb-3">
+                      <Label>Estilista*</Label>
+                      <Input
+                        type="select"
+                        value={String(row.stylist_id || "")}
+                        onChange={(e) => onChangeExtraRow(idx, "stylist_id", e.target.value)}
+                        disabled={!row.service_id || rowLoading}
+                      >
+                        <option value="">
+                          {!row.service_id ? "Seleccione un servicio primero..." : (rowLoading ? "Cargando estilistas..." : "Seleccione un estilista...")}
+                        </option>
+                        {rowLoading ? (
+                          <option disabled>Cargando estilistas...</option>
+                        ) : (
+                          rowStylists.map((s: any) => (
+                            <option key={s.id} value={String(s.id)}>
+                              {s.first_name} {s.last_name}
+                            </option>
+                          ))
+                        )}
+                      </Input>
+                    </Col>
+                    <Col md={1} className="mb-3 d-flex justify-content-end">
+                      <Button color="link" className="text-danger" onClick={() => onRemoveExtraRow(idx)} title="Eliminar fila">
+                        <i className="ri-delete-bin-6-line"></i>
+                      </Button>
+                    </Col>
+                  </Row>
+                </Col>
+              );
+            })}
           </Row>
 
           <div className="hstack gap-2 justify-content-end">
@@ -230,7 +347,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
             >
               {validation.isSubmitting ? (
                 <Spinner size="sm" />
-              ) : !!selectedEvent ? (
+              ) : isEdit ? (
                 "Guardar Cambios"
               ) : (
                 "Agendar Cita"

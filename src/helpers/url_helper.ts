@@ -21,7 +21,7 @@ export const GET_APPOINTMENTS_BY_TENANT = "/appointments/tenant";
 export const GET_AVAILABILITY = "/appointments/availability";
 export const CREATE_APPOINTMENT = "/appointments";
 export const UPDATE_APPOINTMENT = "/appointments";
-
+export const CREATE_APPOINTMENTS_BATCH = "/appointments/batch";
 
 // ================================================================
 // --- URLs DE LA DEMO (Las mantenemos para evitar errores) ---

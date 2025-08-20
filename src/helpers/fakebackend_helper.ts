@@ -90,6 +90,9 @@ export const createAppointment = (appointmentData: any) =>
 export const updateAppointment = (appointment: any) =>
     api.put(`${url.UPDATE_APPOINTMENT}/${appointment.id}`, appointment);
 
+// Crear múltiples citas en un batch
+export const createAppointmentsBatch = (appointmentsData: any) =>
+    api.create(url.CREATE_APPOINTMENTS_BATCH, appointmentsData);
 
 // ================================================================
 // --- CÓDIGO DE LA DEMO (Lo mantenemos para evitar errores) ---
