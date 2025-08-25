@@ -46,7 +46,9 @@ interface AppointmentFormValues {
   newClientPhone: string;
   newClientEmail: string;
 }
+
 type Stylist = { id: string | number; first_name?: string; last_name?: string };
+
 type ExtraRow = { service_id: string; stylist_id: string };
 
 // ——————————————————————————————————————————————————————————————————————
@@ -276,6 +278,11 @@ const Calendar = () => {
     }
   });
 
+  // Limpia el estilista si cambia el servicio (evita estados inconsistentes)
+  useEffect(() => {
+    validation.setFieldValue("stylist_id", "");
+  }, [validation.values.service_id]);
+
   // —————————————————————————————————————————————
   // Carga de formulario en EDICIÓN
   // —————————————————————————————————————————————
@@ -287,7 +294,8 @@ const Calendar = () => {
 
         // servicio principal
         setIsLoadingStylists(true);
-        const filteredStylists = await dispatch(getStylistsForService(service_id));
+        const actionFS: any = await dispatch(getStylistsForService(service_id));
+        const filteredStylists: Stylist[] = (actionFS && 'payload' in actionFS) ? actionFS.payload : actionFS || [];
         setStylistsForService(filteredStylists || []);
         setIsLoadingStylists(false);
 
@@ -319,9 +327,10 @@ const Calendar = () => {
     if (!selectedEvent && validation.values.service_id) {
       setIsLoadingStylists(true);
       dispatch(getStylistsForService(validation.values.service_id))
-        .then((filtered: Stylist[]) => {
+        .then((action: any) => {
+          const filtered: Stylist[] = (action && 'payload' in action) ? action.payload : action || [];
           setStylistsForService(filtered || []);
-          setFreeStylistsMain(filtered || []);
+          setFreeStylistsMain(filtered || []); // lista base visible aunque no haya fecha/hora
         })
         .finally(() => setIsLoadingStylists(false));
     } else if (!validation.values.service_id) {
@@ -374,7 +383,8 @@ const Calendar = () => {
     ensureIncludeStylistId?: string
   ) => {
     if (!serviceId || !dateObj || !hhmm) return;
-    const dateStr = dateObj.toISOString().slice(0, 10);
+    // Usar fecha local (Bogotá) para evitar desajustes por UTC
+    const dateStr = dateObj.toLocaleDateString('en-CA'); // YYYY-MM-DD local
     setCheckingMainFree(true);
     try {
       const base = stylistsForService || [];
@@ -401,7 +411,7 @@ const Calendar = () => {
       setFreeStylistsForRows(p => ({ ...p, [idx]: stylistsForRows[idx] || [] }));
       return;
     }
-    const dateStr = dateObj.toISOString().slice(0, 10);
+    const dateStr = dateObj.toLocaleDateString('en-CA'); // YYYY-MM-DD local
     setCheckingRowFree(p => ({ ...p, [idx]: true }));
     try {
       const base = stylistsForRows[idx] || [];
@@ -472,7 +482,8 @@ const Calendar = () => {
     }
     setIsLoadingStylistsRow(p => ({ ...p, [idx]: true }));
     try {
-      const filtered = await dispatch(getStylistsForService(serviceId));
+      const actionFSR: any = await dispatch(getStylistsForService(serviceId));
+      const filtered: Stylist[] = (actionFSR && 'payload' in actionFSR) ? actionFSR.payload : actionFSR || [];
       setStylistsForRows(p => ({ ...p, [idx]: filtered || [] }));
       const d = validation.values.date as any;
       const t = validation.values.start_time;
@@ -508,14 +519,16 @@ const Calendar = () => {
     if (rowIndex === undefined) {
       const exists = (stylistsForService || []).some(s => String(s.id) === String(stylist.id));
       if (!exists) {
-        const list = await dispatch(getStylistsForService(serviceId));
+        const actionList: any = await dispatch(getStylistsForService(serviceId));
+        const list: Stylist[] = (actionList && 'payload' in actionList) ? actionList.payload : actionList || [];
         setStylistsForService(list || []);
       }
     } else {
       const base = stylistsForRows[rowIndex] || [];
       const exists = base.some(s => String(s.id) === String(stylist.id));
       if (!exists) {
-        const list = await dispatch(getStylistsForService(serviceId));
+        const actionList: any = await dispatch(getStylistsForService(serviceId));
+        const list: Stylist[] = (actionList && 'payload' in actionList) ? actionList.payload : actionList || [];
         setStylistsForRows(p => ({ ...p, [rowIndex]: list || [] }));
       }
     }
@@ -531,7 +544,7 @@ const Calendar = () => {
     }
     setIsSuggestingMain(true);
     try {
-      const dateStr = new Date(d).toISOString().slice(0, 10);
+      const dateStr = new Date(d).toLocaleDateString('en-CA'); // YYYY-MM-DD local
       const stylist: Stylist = await dispatch(suggestStylist(dateStr, t, String(svc)));
 
       if (extraRows.some(r => String(r.stylist_id) === String(stylist.id))) {
@@ -561,7 +574,7 @@ const Calendar = () => {
     }
     setIsSuggestingRow(p => ({ ...p, [idx]: true }));
     try {
-      const dateStr = new Date(d).toISOString().slice(0, 10);
+      const dateStr = new Date(d).toLocaleDateString('en-CA'); // YYYY-MM-DD local
       const stylist: Stylist = await dispatch(suggestStylist(dateStr, t, String(row.service_id)));
 
       if (String(validation.values.stylist_id) === String(stylist.id) || isStylistUsedElsewhere(stylist.id, idx)) {
@@ -790,18 +803,16 @@ const Calendar = () => {
                     name="stylist_id"
                     onChange={validation.handleChange}
                     value={validation.values.stylist_id}
+                    // ✅ No bloqueamos por fecha/hora; mostramos lista base del servicio
                     disabled={
                       !validation.values.service_id ||
-                      !validation.values.date ||
-                      !validation.values.start_time ||
-                      isLoadingStylists ||
-                      checkingMainFree
+                      isLoadingStylists
                     }
                   >
                     <option value="">
                       {checkingMainFree ? "Calculando disponibilidad..." : "Seleccione..."}
                     </option>
-                    {freeStylistsMain.map((s: Stylist) => {
+                    {(freeStylistsMain.length ? freeStylistsMain : stylistsForService).map((s: Stylist) => {
                       const sid = String(s.id);
                       const disabled = extraRows.some(r => String(r.stylist_id) === sid);
                       return (
@@ -836,109 +847,108 @@ const Calendar = () => {
               </Col>
 
               {/* Filas extra (multi-servicio) */}
-              {!selectedEvent &&
-                extraRows.map((row: ExtraRow, idx: number) => {
-                  const baseList = stylistsForRows[idx] || [];
-                  const freeList = freeStylistsForRows[idx] || baseList;
-                  const rowLoading = !!isLoadingStylistsRow[idx];
-                  const rowChecking = !!checkingRowFree[idx];
-
-                  const duplicateHere =
-                    !!row.stylist_id &&
-                    (String(row.stylist_id) === String(validation.values.stylist_id) ||
-                      extraRows.some((r, i) => i !== idx && String(r.stylist_id) === String(row.stylist_id)));
-
-                  return (
-                    <Col xs={12} key={`extra-row-${idx}`} className="border rounded p-3 mb-2">
-                      <Row className="g-3">
-                        <Col md={8}>
-                          <Label>Servicio #{idx + 2}</Label>
-                          <Input
-                            type="select"
-                            value={row.service_id}
-                            onChange={(e) => handleExtraServiceChange(idx, e.target.value)}
-                          >
-                            <option value="">Seleccione un servicio...</option>
-                            {services.map((s: any) => (
-                              <option key={s.id} value={s.id}>
-                                {s.name}
-                              </option>
-                            ))}
-                          </Input>
-                        </Col>
-
-                        <Col md={4} className="d-flex align-items-end">
-                          <div className="w-100">
-                            <Label>&nbsp;</Label>
-                            <div className="d-flex gap-2">
-                              <Button
-                                color="info"
-                                outline
-                                title="Digiturno para esta fila"
-                                onClick={() => handleSuggestForRow(idx)}
-                                disabled={
-                                  isSuggestingRow[idx] ||
-                                  !row.service_id ||
-                                  !validation.values.date ||
-                                  !validation.values.start_time
-                                }
-                              >
-                                {isSuggestingRow[idx] ? <Spinner size="sm" /> : "Digiturno"}
-                              </Button>
-                              <Button color="danger" outline onClick={() => removeExtraRow(idx)} title="Quitar fila">
-                                <i className="ri-delete-bin-6-line"></i>
-                              </Button>
-                            </div>
-                          </div>
-                        </Col>
-
-                        <Col md={12}>
-                          <Label>Estilista (fila #{idx + 2})</Label>
-                          <Input
-                            type="select"
-                            value={row.stylist_id}
-                            onChange={(e) => changeExtraRow(idx, "stylist_id", e.target.value)}
-                            disabled={
-                              !row.service_id ||
-                              !validation.values.date ||
-                              !validation.values.start_time ||
-                              rowLoading ||
-                              rowChecking
-                            }
-                          >
-                            <option value="">
-                              {rowLoading || rowChecking ? "Calculando disponibilidad..." : "Seleccione..."}
-                            </option>
-                            {freeList.map((s: Stylist) => {
-                              const sid = String(s.id);
-                              const disabled =
-                                String(validation.values.stylist_id) === sid ||
-                                extraRows.some((r, i) => i !== idx && String(r.stylist_id) === sid);
-                              return (
-                                <option key={sid} value={sid} disabled={disabled}>
-                                  {s.first_name} {s.last_name}
-                                </option>
-                              );
-                            })}
-                          </Input>
-
-                          {duplicateHere && (
-                            <div className="form-text text-danger mt-1">
-                              No puedes elegir el mismo estilista en servicios simultáneos.
-                            </div>
-                          )}
-                        </Col>
-                      </Row>
-                    </Col>
-                  );
-                })}
-
               {!selectedEvent && (
-                <Col xs={12} className="mt-2">
-                  <Button color="secondary" outline onClick={addExtraRow}>
-                    Añadir otro servicio
-                  </Button>
-                </Col>
+                <>
+                  {extraRows.map((row: ExtraRow, idx: number) => {
+                    const baseList = stylistsForRows[idx] || [];
+                    const freeList = freeStylistsForRows[idx] || baseList;
+                    const rowLoading = !!isLoadingStylistsRow[idx];
+                    const rowChecking = !!checkingRowFree[idx];
+
+                    const duplicateHere =
+                      !!row.stylist_id &&
+                      (String(row.stylist_id) === String(validation.values.stylist_id) ||
+                        extraRows.some((r, i) => i !== idx && String(r.stylist_id) === String(row.stylist_id)));
+
+                    return (
+                      <Col xs={12} key={`extra-row-${idx}`} className="border rounded p-3 mb-2">
+                        <Row className="g-3">
+                          <Col md={8}>
+                            <Label>Servicio #{idx + 2}</Label>
+                            <Input
+                              type="select"
+                              value={row.service_id}
+                              onChange={(e) => handleExtraServiceChange(idx, e.target.value)}
+                            >
+                              <option value="">Seleccione un servicio...</option>
+                              {services.map((s: any) => (
+                                <option key={s.id} value={s.id}>
+                                  {s.name}
+                                </option>
+                              ))}
+                            </Input>
+                          </Col>
+
+                          <Col md={4} className="d-flex align-items-end">
+                            <div className="w-100">
+                              <Label>&nbsp;</Label>
+                              <div className="d-flex gap-2">
+                                <Button
+                                  color="info"
+                                  outline
+                                  title="Digiturno para esta fila"
+                                  onClick={() => handleSuggestForRow(idx)}
+                                  disabled={
+                                    isSuggestingRow[idx] ||
+                                    !row.service_id ||
+                                    !validation.values.date ||
+                                    !validation.values.start_time
+                                  }
+                                >
+                                  {isSuggestingRow[idx] ? <Spinner size="sm" /> : "Digiturno"}
+                                </Button>
+                                <Button color="danger" outline onClick={() => removeExtraRow(idx)} title="Quitar fila">
+                                  <i className="ri-delete-bin-6-line"></i>
+                                </Button>
+                              </div>
+                            </div>
+                          </Col>
+
+                          <Col md={12}>
+                            <Label>Estilista (fila #{idx + 2})</Label>
+                            <Input
+                              type="select"
+                              value={row.stylist_id}
+                              onChange={(e) => changeExtraRow(idx, "stylist_id", e.target.value)}
+                              // ✅ Permitimos seleccionar con la lista base aunque no haya fecha/hora
+                              disabled={
+                                !row.service_id ||
+                                rowLoading
+                              }
+                            >
+                              <option value="">
+                                {rowLoading || rowChecking ? "Calculando disponibilidad..." : "Seleccione..."}
+                              </option>
+                              {(freeList.length ? freeList : baseList).map((s: Stylist) => {
+                                const sid = String(s.id);
+                                const disabled =
+                                  String(validation.values.stylist_id) === sid ||
+                                  extraRows.some((r, i) => i !== idx && String(r.stylist_id) === sid);
+                                return (
+                                  <option key={sid} value={sid} disabled={disabled}>
+                                    {s.first_name} {s.last_name}
+                                  </option>
+                                );
+                              })}
+                            </Input>
+
+                            {duplicateHere && (
+                              <div className="form-text text-danger mt-1">
+                                No puedes elegir el mismo estilista en servicios simultáneos.
+                              </div>
+                            )}
+                          </Col>
+                        </Row>
+                      </Col>
+                    );
+                  })}
+
+                  <Col xs={12} className="mt-2">
+                    <Button color="secondary" outline onClick={addExtraRow}>
+                      Añadir otro servicio
+                    </Button>
+                  </Col>
+                </>
               )}
             </Row>
 
