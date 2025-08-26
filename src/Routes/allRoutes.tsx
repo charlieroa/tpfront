@@ -31,7 +31,7 @@ import Logout from "../pages/Authentication/Logout";
 import Register from "../pages/Authentication/Register"; // Registro de Clientes
 import UserProfile from "../pages/Authentication/user-profile";
 import TenantRegister from "../pages/Authentication/TenantRegister"; // Registro de Dueños
-
+import Settings from '../pages/Pages/Profile/Settings/Settings';
 
 // --- NUESTRAS RUTAS PROTEGIDAS ---
 const authProtectedRoutes = [
@@ -56,7 +56,7 @@ const authProtectedRoutes = [
 
   // Nómina
   { path: "/payroll", component: <InvoiceList /> },
-  
+   { path: "/settings", component: <Settings /> },
   // Perfil del usuario logueado
   { path: "/profile", component: <UserProfile /> },
 

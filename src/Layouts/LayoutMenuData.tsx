@@ -57,6 +57,13 @@ const Navdata = () => {
             icon: "ri-wallet-3-line", // Ícono para nómina/pagos
             link: "/payroll",
         },
+
+         {
+            id: "settings",
+            label: "Configuracion",
+            icon: "ri-settings-3-line", // Ícono para nómina/pagos
+            link: "/Settings",
+        },
         // Puedes añadir más menús aquí si es necesario.
         // Por ejemplo, para los servicios y categorías
         // {
