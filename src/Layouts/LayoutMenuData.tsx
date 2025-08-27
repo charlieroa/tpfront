@@ -41,7 +41,7 @@ const Navdata = () => {
     },
         {
             id: "stylists",
-            label: "Estilistas",
+            label: "Crm",
             icon: "ri-user-heart-line", // Un ícono más apropiado
             link: "/stylists",
         },
