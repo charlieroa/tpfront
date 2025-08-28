@@ -1,5 +1,5 @@
 // src/pages/Settings/index.tsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Card, CardBody, CardHeader, Col, Container, Form, Input, Label,
   Nav, NavItem, NavLink, Row, TabContent, TabPane, Alert, Button, Spinner,
@@ -9,7 +9,7 @@ import classnames from "classnames";
 import { jwtDecode } from "jwt-decode";
 
 import progileBg from '../../../../assets/images/profile-bg.jpg';
-import avatar1 from '../../../../assets/images/users/avatar-1.jpg';
+import avatar1 from '../../../../assets/images/users/avatar-1.jpg'; // Usaremos este como placeholder de logo
 
 import { api } from "../../../../services/api";
 import { getToken } from "../../../../services/auth";
@@ -35,6 +35,7 @@ type Tenant = {
   admin_fee_percent?: number | null;
   slug?: string | null;
   working_hours?: Record<string, string | null> | null;
+  logo_url?: string | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -248,7 +249,7 @@ const ServiceModal: React.FC<{
             {creatingCat && (
               <div className="d-flex gap-2 mt-2">
                 <Input placeholder="Nombre de la nueva categoría" value={newCatName} onChange={(e) => setNewCatName(e.target.value)} />
-                <Button type="button" color="success" onClick={createCategoryInline} disabled={saving}>Crear</Button>
+                <Button type="button" color="success" onClick={createCategoryInline}>Crear</Button>
               </div>
             )}
           </Col>
@@ -276,8 +277,8 @@ const ServiceModal: React.FC<{
       </ModalBody>
       <ModalFooter>
         <Button color="secondary" onClick={onClose}>Cancelar</Button>
-        <Button color="primary" onClick={save} disabled={saving}>
-          {saving && <Spinner size="sm" className="me-2" />} Guardar
+        <Button color="primary" onClick={save}>
+          Guardar
         </Button>
       </ModalFooter>
     </Modal>
@@ -296,14 +297,19 @@ const Settings: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
+  // Datos peluquería (pares por fila)
   const [name, setName] = useState<string>("");
-  const [address, setAddress] = useState<string>("");
   const [phone, setPhone] = useState<string>("");
-
+  const [address, setAddress] = useState<string>("");
   const [email, setEmail] = useState<string>("");
   const [website, setWebsite] = useState<string>("");
   const [ivaRate, setIvaRate] = useState<string>("");
   const [adminFee, setAdminFee] = useState<string>("");
+
+  // Logo
+  const [logoUrl, setLogoUrl] = useState<string>("");
+  const logoInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState<boolean>(false);
 
   const [perDay, setPerDay] = useState<WorkingHoursPerDay>(defaultWeek());
 
@@ -334,13 +340,13 @@ const Settings: React.FC = () => {
 
         setTenant(t);
         setName((t?.name ?? "") as string);
-        setAddress((t?.address ?? "") as string);
         setPhone((t?.phone ?? "") as string);
-
+        setAddress((t?.address ?? "") as string);
         setEmail((t?.email ?? "") as string);
         setWebsite((t?.website ?? "") as string);
         setIvaRate(t?.iva_rate == null ? "" : String(t.iva_rate));
         setAdminFee(t?.admin_fee_percent == null ? "" : String(t.admin_fee_percent));
+        setLogoUrl(t?.logo_url || "");
 
         setPerDay(normalizeWorkingHoursFromAPI(t?.working_hours));
       } catch (e:any) {
@@ -359,6 +365,39 @@ const Settings: React.FC = () => {
     return infoOk && hasActive ? 100 : 50;
   }, [name, address, phone, perDay]);
 
+  // ===== Logo Handlers =====
+  const openLogoPicker = () => {
+    logoInputRef.current?.click();
+  };
+
+  const handleLogoFile = async (file: File) => {
+    // Preview inmediato
+    const localUrl = URL.createObjectURL(file);
+    setLogoUrl(localUrl);
+
+    // Intento de upload (opcional, si tienes endpoint)
+    try {
+      setUploadingLogo(true);
+      const form = new FormData();
+      form.append('file', file);
+      // Ajusta la ruta si ya tienes un uploader
+      const { data } = await api.post('/files/upload', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      // Se asume que data.url devuelve la URL pública
+      if (data?.url) setLogoUrl(data.url);
+    } catch {
+      // Si falla, mantenemos el preview local; el usuario puede guardar luego un URL manual si lo deseas
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  const onLogoInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) handleLogoFile(f);
+  };
+
   const saveAll = async () => {
     setSaving(true);
     setError(null);
@@ -372,13 +411,14 @@ const Settings: React.FC = () => {
 
       const payload: any = {
         name: name.trim() || null,
-        address: address.trim() || null,
         phone: phone.trim() || null,
-        working_hours: buildWorkingHoursPayload(perDay),
+        address: address.trim() || null,
         email: email.trim() || null,
         website: website.trim() || null,
+        working_hours: buildWorkingHoursPayload(perDay),
         iva_rate: ensureNumber(ivaRate),
         admin_fee_percent: ensureNumber(adminFee),
+        logo_url: logoUrl || null,
       };
 
       await api.put(`/tenants/${tenantId}`, payload);
@@ -386,12 +426,14 @@ const Settings: React.FC = () => {
 
       setTenant(fresh);
       setName((fresh?.name ?? "") as string);
-      setAddress((fresh?.address ?? "") as string);
       setPhone((fresh?.phone ?? "") as string);
+      setAddress((fresh?.address ?? "") as string);
       setEmail((fresh?.email ?? "") as string);
       setWebsite((fresh?.website ?? "") as string);
       setIvaRate(fresh?.iva_rate == null ? "" : String(fresh.iva_rate));
       setAdminFee(fresh?.admin_fee_percent == null ? "" : String(fresh.admin_fee_percent));
+      setLogoUrl(fresh?.logo_url || "");
+
       setPerDay(normalizeWorkingHoursFromAPI(fresh?.working_hours));
 
       setSavedMsg("¡Cambios guardados correctamente!");
@@ -422,7 +464,7 @@ const Settings: React.FC = () => {
     });
   };
 
-  // ====== Servicios / Categorías (se quedan en Settings) ======
+  // ====== Servicios / Categorías ======
   const tenantId = useMemo(() => decodeTenantId() || "", []);
   const loadCategories = async () => {
     setCatLoading(true);
@@ -506,15 +548,36 @@ const Settings: React.FC = () => {
           </div>
 
           <Row>
-            {/* Col izquierda: avatar + progreso */}
+            {/* Col izquierda: logo + progreso */}
             <Col xxl={3}>
               <Card className="mt-n5">
                 <CardBody className="p-4 text-center">
-                  <div className="profile-user position-relative d-inline-block mx-auto  mb-4">
-                    <img src={avatar1} className="rounded-circle avatar-xl img-thumbnail user-profile-image" alt="user-profile" />
+                  {/* BLOQUE DE LOGO EDITABLE */}
+                  <div className="profile-user position-relative d-inline-block mx-auto mb-4" style={{ cursor: 'pointer' }} onClick={openLogoPicker} title="Cambiar logo">
+                    <img
+                      src={logoUrl || avatar1}
+                      className="rounded-circle avatar-xl img-thumbnail user-profile-image"
+                      alt="logo"
+                    />
+                    <span
+                      className="position-absolute bottom-0 end-0 bg-primary text-white rounded-circle d-flex align-items-center justify-content-center"
+                      style={{ width: 36, height: 36, border: '2px solid white' }}
+                    >
+                      <i className="ri-image-edit-line"></i>
+                    </span>
+                    <input
+                      ref={logoInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="d-none"
+                      onChange={onLogoInputChange}
+                    />
+                  </div>
+                  <div className="small text-muted mb-2">
+                    {uploadingLogo ? "Subiendo logo…" : "Haz clic en el logo para cambiarlo"}
                   </div>
                   <h5 className="fs-16 mb-1">{tenant?.slug || "Mi peluquería"}</h5>
-                  <p className="text-muted mb-0">ID: {tenant?.id || "—"}</p>
+                
                 </CardBody>
               </Card>
 
@@ -575,56 +638,56 @@ const Settings: React.FC = () => {
                   {savedMsg && <Alert color="success" fade={false}>{savedMsg}</Alert>}
 
                   <TabContent activeTab={activeTab}>
-                    {/* TAB 1 */}
+                    {/* TAB 1: Datos de la Peluquería (pares por fila) */}
                     <TabPane tabId="1">
                       <Form onSubmit={handleSaveInfo}>
-                        <Row>
+                        <Row className="g-3">
                           <Col lg={6}>
-                            <div className="mb-3">
+                            <div className="mb-0">
                               <Label htmlFor="nameInput" className="form-label">Nombre</Label>
                               <Input id="nameInput" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej: Bunker Barber Shop" required />
                             </div>
                           </Col>
                           <Col lg={6}>
-                            <div className="mb-3">
+                            <div className="mb-0">
                               <Label htmlFor="phoneInput" className="form-label">Teléfono</Label>
                               <Input id="phoneInput" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Ej: 3001234567" required />
                             </div>
                           </Col>
-                          <Col lg={12}>
-                            <div className="mb-3">
+
+                          <Col lg={6}>
+                            <div className="mb-0">
                               <Label htmlFor="addressInput" className="form-label">Dirección</Label>
                               <Input id="addressInput" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Ej: Calle 123 #45-67" required />
                             </div>
                           </Col>
-
-                          {/* Extras */}
                           <Col lg={6}>
-                            <div className="mb-3">
+                            <div className="mb-0">
                               <Label htmlFor="emailInput" className="form-label">Email</Label>
                               <Input id="emailInput" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="contacto@mi-peluqueria.com" />
                             </div>
                           </Col>
+
                           <Col lg={6}>
-                            <div className="mb-3">
+                            <div className="mb-0">
                               <Label htmlFor="websiteInput" className="form-label">Página web</Label>
                               <Input id="websiteInput" type="url" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://mi-peluqueria.com" />
                             </div>
                           </Col>
                           <Col lg={3}>
-                            <div className="mb-3">
+                            <div className="mb-0">
                               <Label htmlFor="ivaInput" className="form-label">IVA (%)</Label>
                               <Input id="ivaInput" type="number" min={0} max={100} step="0.01" value={ivaRate} onChange={(e) => setIvaRate(e.target.value)} placeholder="19" />
                             </div>
                           </Col>
                           <Col lg={3}>
-                            <div className="mb-3">
+                            <div className="mb-0">
                               <Label htmlFor="adminFeeInput" className="form-label">% Administrativo</Label>
                               <Input id="adminFeeInput" type="number" min={0} max={100} step="0.01" value={adminFee} onChange={(e) => setAdminFee(e.target.value)} placeholder="10" />
                             </div>
                           </Col>
 
-                          <Col lg={12}>
+                          <Col lg={12} className="pt-2">
                             <div className="hstack gap-2 justify-content-end">
                               <Button type="submit" color="primary" disabled={saving}>
                                 {saving && <Spinner size="sm" className="me-2" />} Guardar cambios
@@ -634,12 +697,13 @@ const Settings: React.FC = () => {
                                 color="soft-success"
                                 onClick={() => {
                                   setName((tenant?.name ?? "") as string);
-                                  setAddress((tenant?.address ?? "") as string);
                                   setPhone((tenant?.phone ?? "") as string);
+                                  setAddress((tenant?.address ?? "") as string);
                                   setEmail((tenant?.email ?? "") as string);
                                   setWebsite((tenant?.website ?? "") as string);
                                   setIvaRate(tenant?.iva_rate == null ? "" : String(tenant?.iva_rate));
                                   setAdminFee(tenant?.admin_fee_percent == null ? "" : String(tenant?.admin_fee_percent));
+                                  setLogoUrl(tenant?.logo_url || "");
                                   setPerDay(normalizeWorkingHoursFromAPI(tenant?.working_hours));
                                 }}
                               >
@@ -765,7 +829,7 @@ const Settings: React.FC = () => {
                       />
                     </TabPane>
 
-                    {/* TAB 4: Personal ——— llama la vista separada */}
+                    {/* TAB 4: Personal */}
                     <TabPane tabId="4">
                       <Personal />
                     </TabPane>
