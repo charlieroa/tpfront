@@ -57,19 +57,28 @@ export const getCalendarData = () => async (dispatch: any) => {
     const startDate = new Date(year, 0, 1).toISOString().split("T")[0];
     const endDate = new Date(year, 11, 31).toISOString().split("T")[0];
 
-    const [
-      { data: appointments },
-      { data: clients },
-      { data: services },
-      { data: stylists },
-      { data: nextAvailableStylist },
-    ] = await Promise.all([
+    // Hacemos todos opcionales con allSettled
+    const results = await Promise.allSettled([
       api.get(`/appointments/tenant/${tenantId}`, { params: { startDate, endDate } }),
       api.get(`/users/tenant/${tenantId}`, { params: { role_id: 4 } }),
       api.get(`/services/tenant/${tenantId}`),
       api.get(`/users/tenant/${tenantId}`, { params: { role_id: 3 } }),
-      api.get(`/stylists/next-available`),
+      // "next-available" puede no existir → no bloquea el resto
+      api.get(`/stylists/next-available`, { params: { tenant_id: tenantId } }),
     ]);
+
+    const [rApps, rClients, rServices, rStylists, rNext] = results;
+
+    const appointments = rApps.status === "fulfilled" ? rApps.value.data : [];
+    const clients     = rClients.status === "fulfilled" ? rClients.value.data : [];
+    const services    = rServices.status === "fulfilled" ? rServices.value.data : [];
+    const stylists    = rStylists.status === "fulfilled" ? rStylists.value.data : [];
+    const nextAvail   = rNext.status === "fulfilled" ? rNext.value.data : null;
+
+    if (rNext.status === "rejected") {
+      // Log suave para que veas el 404 pero no rompa nada
+      console.warn("[getCalendarData] next-available falló:", rNext.reason?.response?.status || rNext.reason?.message);
+    }
 
     const formattedEvents = (Array.isArray(appointments) ? appointments : []).map((cita: any) => ({
       id: cita.id,
@@ -86,7 +95,7 @@ export const getCalendarData = () => async (dispatch: any) => {
         clients: Array.isArray(clients) ? clients : [],
         services: Array.isArray(services) ? services : [],
         stylists: Array.isArray(stylists) ? stylists : [],
-        nextAvailableStylist: nextAvailableStylist || null,
+        nextAvailableStylist: nextAvail || null,
       })
     );
   } catch (error: any) {
@@ -94,10 +103,12 @@ export const getCalendarData = () => async (dispatch: any) => {
   }
 };
 
+
 /** Disponibilidad por estilista/fecha */
 export const fetchAvailability = (stylistId: string, date: string) => async (dispatch: any) => {
   try {
     const tenantId = getTenantId();
+    // console.log('[Thunk] fetchAvailability', { tenantId, stylistId, date });
     const { data } = await api.get(`/appointments/availability`, {
       params: { tenant_id: tenantId, stylist_id: stylistId, date },
     });
@@ -113,8 +124,10 @@ export const fetchAvailability = (stylistId: string, date: string) => async (dis
 /** Sugerir estilista por turno */
 export const suggestStylist = (date: string, startTime: string, serviceId: string) => async () => {
   try {
+    const tenantId = getTenantId();
+    // console.log('[Thunk] suggestStylist', { tenantId, date, startTime, serviceId });
     const { data: suggestedStylist } = await api.get(`/stylists/suggest-by-turn`, {
-      params: { date, start_time: startTime, service_id: serviceId },
+      params: { tenant_id: tenantId, date, start_time: startTime, service_id: serviceId },
     });
     toast.success(`Estilista sugerido: ${suggestedStylist?.first_name ?? "—"}`);
     return Promise.resolve(suggestedStylist);
@@ -130,7 +143,11 @@ export const suggestStylist = (date: string, startTime: string, serviceId: strin
 export const getStylistsForService = (serviceId: string) => async () => {
   if (!serviceId) return Promise.resolve([]);
   try {
-    const { data: stylists } = await api.get(`/services/${serviceId}/stylists`);
+    const tenantId = getTenantId();
+    // console.log('[Thunk] getStylistsForService', { tenantId, serviceId });
+    const { data: stylists } = await api.get(`/services/${serviceId}/stylists`, {
+      params: { tenant_id: tenantId },
+    });
     return Array.isArray(stylists) ? stylists : [];
   } catch (error: any) {
     console.error("Error al obtener estilistas por servicio:", error);

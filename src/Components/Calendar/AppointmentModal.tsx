@@ -1,5 +1,3 @@
-
-
 // =============================================
 // File: src/pages/Calendar/AppointmentModal.tsx
 // =============================================
@@ -68,7 +66,12 @@ const generateTimes = (start = 8, end = 20, stepMin = 30): string[] => {
 
 const AppointmentModal: React.FC<AppointmentModalProps> = ({ isOpen, onClose, selectedEvent, defaultDate }) => {
   const dispatch: any = useDispatch();
-  const { clients, services } = useSelector((state: any) => state.Calendar);
+
+  // Selector robusto por si el slice está registrado como calendar/Calendar
+  const {
+    clients = [],
+    services = [],
+  } = useSelector((state: any) => state.calendar || state.Calendar || {});
 
   // Form UI states
   const [showNewClientForm, setShowNewClientForm] = useState<boolean>(false);
@@ -284,6 +287,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({ isOpen, onClose, se
 
   // —————————————————————————————————————————————
   // CREACIÓN: cuando cambia el servicio principal, cargo estilistas
+  // (y si ya hay fecha/hora, recalculo libres de una)
   // —————————————————————————————————————————————
   useEffect(() => {
     if (!selectedEvent && validation.values.service_id) {
@@ -292,7 +296,14 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({ isOpen, onClose, se
         .then((action: any) => {
           const filtered: Stylist[] = (action && "payload" in action) ? action.payload : action || [];
           setStylistsForService(filtered || []);
-          setFreeStylistsMain(filtered || []); // lista base visible aunque no haya fecha/hora
+          const d = validation.values.date as any;
+          const t = validation.values.start_time;
+          if (d && t) {
+            // recalcular inmediatamente si ya hay fecha/hora
+            recalcFreeStylistsMain(String(validation.values.service_id), new Date(d), t);
+          } else {
+            setFreeStylistsMain(filtered || []);
+          }
         })
         .finally(() => setIsLoadingStylists(false));
     } else if (!validation.values.service_id) {
@@ -429,7 +440,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({ isOpen, onClose, se
     const idStr = String(stylistId);
     if (String(validation.values.stylist_id) === idStr && rowIndex !== undefined) return true;
     return extraRows.some((r: ExtraRow, i: number) => i !== rowIndex && String(r.stylist_id) === idStr);
-  };
+    };
 
   const handleExtraServiceChange = async (idx: number, serviceId: string) => {
     changeExtraRow(idx, "service_id", serviceId);
@@ -672,9 +683,12 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({ isOpen, onClose, se
                 name="service_id"
                 onChange={validation.handleChange}
                 value={validation.values.service_id}
+                disabled={!services?.length}
               >
-                <option value="">Seleccione un servicio...</option>
-                {services.map((s: any) => (
+                <option value="">
+                  {services?.length ? "Seleccione un servicio..." : "Cargando servicios..."}
+                </option>
+                {services?.map((s: any) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
                   </option>
@@ -785,7 +799,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({ isOpen, onClose, se
                             onChange={(e) => handleExtraServiceChange(idx, e.target.value)}
                           >
                             <option value="">Seleccione un servicio...</option>
-                            {services.map((s: any) => (
+                            {services?.map((s: any) => (
                               <option key={s.id} value={s.id}>
                                 {s.name}
                               </option>
