@@ -3,7 +3,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Card, CardBody, CardHeader, Col, Container, Form, Input, Label,
   Nav, NavItem, NavLink, Row, TabContent, TabPane, Alert, Button, Spinner,
-  Modal, ModalHeader, ModalBody, ModalFooter, Table, Badge
+  Modal, ModalHeader, ModalBody, ModalFooter, Table, Badge,
+  Pagination, PaginationItem, PaginationLink
 } from 'reactstrap';
 import classnames from "classnames";
 import { jwtDecode } from "jwt-decode";
@@ -320,6 +321,24 @@ const Settings: React.FC = () => {
   const [svModalOpen, setSvModalOpen] = useState(false);
   const [svEdit, setSvEdit] = useState<Service | null>(null);
 
+  // NUEVO: paginación de Servicios
+  const SVC_PAGE_SIZE = 6;
+  const [svcPage, setSvcPage] = useState<number>(1);
+  const totalSvcPages = useMemo(() => Math.max(1, Math.ceil(services.length / SVC_PAGE_SIZE)), [services.length]);
+  const paginatedServices = useMemo(() => {
+    const start = (svcPage - 1) * SVC_PAGE_SIZE;
+    const end = start + SVC_PAGE_SIZE;
+    return services.slice(start, end);
+  }, [services, svcPage]);
+  useEffect(() => {
+    if (svcPage > totalSvcPages) setSvcPage(totalSvcPages);
+    if (services.length === 0) setSvcPage(1);
+  }, [services.length, totalSvcPages]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // NUEVO: conteo de personal para progreso (25%)
+  const [staffCount, setStaffCount] = useState<number>(0);
+  const [staffLoading, setStaffLoading] = useState<boolean>(false);
+
   const tabChange = (tab: "1" | "2" | "3" | "4") => { if (activeTab !== tab) setActiveTab(tab); };
 
   useEffect(() => {
@@ -359,12 +378,6 @@ const Settings: React.FC = () => {
     load();
   }, []);
 
-  const progress = useMemo(() => {
-    const infoOk = name.trim() !== "" && address.trim() !== "" && phone.trim() !== "";
-    const hasActive = DAYS.some(({ key }) => perDay[key].active);
-    return infoOk && hasActive ? 100 : 50;
-  }, [name, address, phone, perDay]);
-
   // ===== Logo Handlers =====
   const openLogoPicker = () => {
     logoInputRef.current?.click();
@@ -387,7 +400,7 @@ const Settings: React.FC = () => {
       // Se asume que data.url devuelve la URL pública
       if (data?.url) setLogoUrl(data.url);
     } catch {
-      // Si falla, mantenemos el preview local; el usuario puede guardar luego un URL manual si lo deseas
+      // Si falla, mantenemos el preview local
     } finally {
       setUploadingLogo(false);
     }
@@ -482,16 +495,42 @@ const Settings: React.FC = () => {
     try {
       const { data } = await api.get(`/services/tenant/${tenantId}`);
       setServices(Array.isArray(data) ? data : []);
+      // Opcional: si prefieres volver siempre a la página 1 al recargar:
+      setSvcPage(1);
     } catch (e:any) {
       setError(e?.response?.data?.message || e?.message || 'No se pudieron cargar los servicios');
     } finally {
       setSvcLoading(false);
     }
   };
+
+  // ====== NUEVO: cargar personal (solo conteo) ======
+  const loadStaffCount = async () => {
+    if (!tenantId) return;
+    setStaffLoading(true);
+    try {
+      // Si tu API usa otra convención, ajústala aquí:
+      // Opción A (users con filtro de rol):
+      const { data } = await api.get(`/users/tenant/${tenantId}?role=stylist`);
+      const list = Array.isArray(data) ? data : [];
+      setStaffCount(list.length);
+
+      // Opción B (si usas /staff/tenant/:tenantId), descomenta:
+      // const { data } = await api.get(`/staff/tenant/${tenantId}`);
+      // setStaffCount(Array.isArray(data) ? data.length : 0);
+    } catch (e:any) {
+      // Si falla, no rompemos UI; marcamos 0
+      setStaffCount(0);
+    } finally {
+      setStaffLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!tenantId) return;
     loadCategories();
     loadServices();
+    loadStaffCount();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
@@ -503,9 +542,55 @@ const Settings: React.FC = () => {
     try {
       await api.delete(`/services/${svc.id}`);
       await loadServices();
+      // El useEffect de servicios ajusta la página si quedara fuera de rango
     } catch (e:any) {
       alert(e?.response?.data?.message || e?.message || 'No se pudo eliminar el servicio');
     }
+  };
+
+  // ====== NUEVO: progreso 4x25% ======
+  const progress = useMemo(() => {
+    // 1) Datos
+    const datosOk = name.trim() !== "" && address.trim() !== "" && phone.trim() !== "";
+
+    // 2) Horarios (al menos un día activo + sin errores)
+    const hasActive = DAYS.some(({ key }) => perDay[key].active);
+    const hoursErr = validateWorkingHours(perDay);
+    const horariosOk = hasActive && hoursErr === null;
+
+    // 3) Servicios
+    const serviciosOk = services.length > 0;
+
+    // 4) Personal
+    const personalOk = staffCount > 0;
+
+    const score =
+      (datosOk ? 1 : 0) +
+      (horariosOk ? 1 : 0) +
+      (serviciosOk ? 1 : 0) +
+      (personalOk ? 1 : 0);
+
+    return score * 25; // 0, 25, 50, 75, 100
+  }, [name, address, phone, perDay, services.length, staffCount]);
+
+  // Render de números de página para Servicios
+  const renderSvcPageNumbers = () => {
+    const windowSize = 5;
+    let start = Math.max(1, svcPage - Math.floor(windowSize / 2));
+    let end = start + windowSize - 1;
+    if (end > totalSvcPages) {
+      end = totalSvcPages;
+      start = Math.max(1, end - windowSize + 1);
+    }
+    const items = [];
+    for (let p = start; p <= end; p++) {
+      items.push(
+        <PaginationItem key={p} active={p === svcPage}>
+          <PaginationLink onClick={() => setSvcPage(p)}>{p}</PaginationLink>
+        </PaginationItem>
+      );
+    }
+    return items;
   };
 
   if (loading) {
@@ -538,9 +623,7 @@ const Settings: React.FC = () => {
                 <div className="text-end p-3">
                   <div className="p-0 ms-auto rounded-circle profile-photo-edit">
                     <Input id="profile-foreground-img-file-input" type="file" className="profile-foreground-img-file-input" />
-                    <Label htmlFor="profile-foreground-img-file-input" className="profile-photo-edit btn btn-light">
-                      <i className="ri-image-edit-line align-bottom me-1"></i> Cambiar portada
-                    </Label>
+                   
                   </div>
                 </div>
               </div>
@@ -577,7 +660,6 @@ const Settings: React.FC = () => {
                     {uploadingLogo ? "Subiendo logo…" : "Haz clic en el logo para cambiarlo"}
                   </div>
                   <h5 className="fs-16 mb-1">{tenant?.slug || "Mi peluquería"}</h5>
-                
                 </CardBody>
               </Card>
 
@@ -601,6 +683,26 @@ const Settings: React.FC = () => {
                       <div className="label">{progress}%</div>
                     </div>
                   </div>
+
+                  {/* Opcional: mini leyenda del estado por bloque */}
+                  <ul className="list-unstyled mt-3 mb-0">
+                    <li className="d-flex align-items-center gap-2">
+                      <i className={`ri-checkbox-${(name && phone && address) ? 'circle' : 'blank'}-line`}></i>
+                      <span>Datos</span>
+                    </li>
+                    <li className="d-flex align-items-center gap-2">
+                      <i className={`ri-checkbox-${(DAYS.some(d => perDay[d.key].active) && validateWorkingHours(perDay) === null) ? 'circle' : 'blank'}-line`}></i>
+                      <span>Horarios</span>
+                    </li>
+                    <li className="d-flex align-items-center gap-2">
+                      <i className={`ri-checkbox-${(services.length > 0) ? 'circle' : 'blank'}-line`}></i>
+                      <span>Servicios</span>
+                    </li>
+                    <li className="d-flex align-items-center gap-2">
+                      <i className={`ri-checkbox-${(staffCount > 0) ? 'circle' : 'blank'}-line`}></i>
+                      <span>Personal {staffLoading && <Spinner size="sm" />}</span>
+                    </li>
+                  </ul>
                 </CardBody>
               </Card>
             </Col>
@@ -766,7 +868,7 @@ const Settings: React.FC = () => {
                       </Form>
                     </TabPane>
 
-                    {/* TAB 3: Servicios */}
+                    {/* TAB 3: Servicios (con paginación SIEMPRE visible) */}
                     <TabPane tabId="3">
                       <div className="d-flex justify-content-between align-items-center mb-3">
                         <h5 className="mb-0">Servicios</h5>
@@ -790,10 +892,10 @@ const Settings: React.FC = () => {
                             </tr>
                           </thead>
                           <tbody>
-                            {services.length === 0 && (
+                            {paginatedServices.length === 0 && (
                               <tr><td colSpan={5} className="text-center text-muted">Sin servicios</td></tr>
                             )}
-                            {services.map(s => {
+                            {paginatedServices.map(s => {
                               const catName = categories.find(c => c.id === s.category_id)?.name || "—";
                               return (
                                 <tr key={s.id}>
@@ -816,6 +918,27 @@ const Settings: React.FC = () => {
                             })}
                           </tbody>
                         </Table>
+                      </div>
+
+                      {/* Controles de paginación — SIEMPRE visibles */}
+                      <div className="d-flex justify-content-end">
+                        <Pagination className="pagination-separated mb-0">
+                          <PaginationItem disabled={svcPage === 1}>
+                            <PaginationLink first onClick={() => setSvcPage(1)} />
+                          </PaginationItem>
+                          <PaginationItem disabled={svcPage === 1}>
+                            <PaginationLink previous onClick={() => setSvcPage(p => Math.max(1, p - 1))} />
+                          </PaginationItem>
+
+                          {renderSvcPageNumbers()}
+
+                          <PaginationItem disabled={svcPage === totalSvcPages}>
+                            <PaginationLink next onClick={() => setSvcPage(p => Math.min(totalSvcPages, p + 1))} />
+                          </PaginationItem>
+                          <PaginationItem disabled={svcPage === totalSvcPages}>
+                            <PaginationLink last onClick={() => setSvcPage(totalSvcPages)} />
+                          </PaginationItem>
+                        </Pagination>
                       </div>
 
                       <ServiceModal

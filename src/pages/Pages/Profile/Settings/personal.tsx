@@ -3,7 +3,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Button, Spinner, Table, Badge, Modal, ModalHeader, ModalBody, ModalFooter,
   Row, Col, Input, Label, Alert, UncontrolledDropdown, DropdownToggle, DropdownMenu,
-  Nav, NavItem, NavLink, TabContent, TabPane
+  Nav, NavItem, NavLink, TabContent, TabPane,
+  Pagination, PaginationItem, PaginationLink
 } from "reactstrap";
 import classnames from "classnames";
 import { jwtDecode } from "jwt-decode";
@@ -694,7 +695,7 @@ const StaffModal: React.FC<{
 };
 
 /* =========================
-   Vista Personal
+   Vista Personal (con paginación SIEMPRE visible)
 ========================= */
 const Personal: React.FC = () => {
   const tenantId = useMemo(() => decodeTenantId() || "", []);
@@ -714,6 +715,30 @@ const Personal: React.FC = () => {
   // Modal
   const [stModalOpen, setStModalOpen] = useState(false);
   const [stEdit, setStEdit] = useState<Staff | null>(null);
+
+  // Paginación
+  const PAGE_SIZE = 6;
+  const [page, setPage] = useState<number>(1);
+
+  const totalPages = useMemo(() => {
+    return Math.max(1, Math.ceil(staff.length / PAGE_SIZE));
+  }, [staff.length]);
+
+  const paginatedStaff = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    const end = start + PAGE_SIZE;
+    return staff.slice(start, end);
+  }, [staff, page]);
+
+  // Si cambia el staff (carga/eliminación), ajustar página si quedó fuera de rango
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+    if (staff.length === 0) {
+      setPage(1);
+    }
+  }, [staff.length, totalPages]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadCategories = async () => {
     setCatLoading(true);
@@ -763,6 +788,8 @@ const Personal: React.FC = () => {
       const arr = Array.isArray(data) ? data : [];
       setStaff(arr);
       await loadAssignedForStaff(arr);
+      // Reinicia a la primera página cuando recargas
+      setPage(1);
     } catch (e:any) {
       setError(e?.response?.data?.message || e?.message || 'No se pudo cargar el personal');
     } finally {
@@ -787,9 +814,33 @@ const Personal: React.FC = () => {
     try {
       await api.delete(`/users/${u.id}`);
       await loadStaff();
+      // Si después de eliminar quedaste en una página vacía, el effect de arriba corrige a la anterior
     } catch (e:any) {
       alert(e?.response?.data?.message || e?.message || 'No se pudo eliminar el personal');
     }
+  };
+
+  // Render números de página (ventana alrededor de la página actual)
+  const renderPageNumbers = () => {
+    const windowSize = 5; // cantidad de botones visibles
+    let start = Math.max(1, page - Math.floor(windowSize / 2));
+    let end = start + windowSize - 1;
+    if (end > totalPages) {
+      end = totalPages;
+      start = Math.max(1, end - windowSize + 1);
+    }
+
+    const items = [];
+    for (let p = start; p <= end; p++) {
+      items.push(
+        <PaginationItem key={p} active={p === page}>
+          <PaginationLink onClick={() => setPage(p)}>
+            {p}
+          </PaginationLink>
+        </PaginationItem>
+      );
+    }
+    return items;
   };
 
   return (
@@ -818,10 +869,10 @@ const Personal: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {staff.length === 0 && (
+            {paginatedStaff.length === 0 && (
               <tr><td colSpan={5} className="text-center text-muted">Sin personal</td></tr>
             )}
-            {staff.map(u => {
+            {paginatedStaff.map(u => {
               const svcs = assignedByStaff[u.id] || [];
               const show = svcs.slice(0, 3);
               const more = Math.max(0, svcs.length - show.length);
@@ -856,6 +907,27 @@ const Personal: React.FC = () => {
             })}
           </tbody>
         </Table>
+      </div>
+
+      {/* Controles de paginación — SIEMPRE visibles */}
+      <div className="d-flex justify-content-end">
+        <Pagination className="pagination-separated mb-0">
+          <PaginationItem disabled={page === 1}>
+            <PaginationLink first onClick={() => setPage(1)} />
+          </PaginationItem>
+          <PaginationItem disabled={page === 1}>
+            <PaginationLink previous onClick={() => setPage(p => Math.max(1, p - 1))} />
+          </PaginationItem>
+
+          {renderPageNumbers()}
+
+          <PaginationItem disabled={page === totalPages}>
+            <PaginationLink next onClick={() => setPage(p => Math.min(totalPages, p + 1))} />
+          </PaginationItem>
+          <PaginationItem disabled={page === totalPages}>
+            <PaginationLink last onClick={() => setPage(totalPages)} />
+          </PaginationItem>
+        </Pagination>
       </div>
 
       <StaffModal
