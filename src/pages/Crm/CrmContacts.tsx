@@ -34,7 +34,7 @@ import DeleteModal from "../../Components/Common/DeleteModal";
 // Export Modal
 import ExportCSVModal from "../../Components/Common/ExportCSVModal";
 
-//Import actions
+//Import actions (se conservan aunque no las usemos para listar)
 import {
   getContacts as onGetContacts,
   addNewContact as onAddNewContact,
@@ -53,10 +53,8 @@ import Loader from "../../Components/Common/Loader";
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { createSelector } from "reselect";
-import moment from "moment";
 
 import dummyImg from "../../assets/images/users/user-dummy-img.jpg";
-
 
 const CrmContacts = () => {
   const dispatch: any = useDispatch();
@@ -65,16 +63,25 @@ const CrmContacts = () => {
     selectLayoutState,
     (state: any) => ({
       crmcontacts: state.crmcontacts,
-      // isContactSuccess: state.isContactSuccess,
       error: state.error,
     })
   );
-  // Inside your component
-  const {
-    crmcontacts, error
-  } = useSelector(crmcontactData);
+  const { crmcontacts, error } = useSelector(crmcontactData);
+
+  // Datos fijos de Laura
+  const lauraData = useMemo(() => ([
+    {
+      id: "1",
+      img: avatar10,
+      name: "Laura cliente",
+      email: "laura@cliente.com",
+      phone: "3112244567",
+      tags: ["Corte hombre"], // Últimos servicios
+    }
+  ]), []);
 
   useEffect(() => {
+    // Si tu app requiere cargar algo, mantenemos la llamada
     if (crmcontacts && !crmcontacts.length) {
       dispatch(onGetContacts());
     }
@@ -91,12 +98,16 @@ const CrmContacts = () => {
     }
   }, [crmcontacts]);
 
-
   const [isEdit, setIsEdit] = useState<boolean>(false);
   const [contact, setContact] = useState<any>([]);
+  const [info, setInfo] = useState<any>({});
 
+  // Seleccionar por defecto a Laura en el panel derecho
+  useEffect(() => {
+    if (lauraData?.length) setInfo(lauraData[0]);
+  }, [lauraData]);
 
-  //delete Conatct
+  // Modales / delete
   const [deleteModal, setDeleteModal] = useState<boolean>(false);
   const [deleteModalMulti, setDeleteModalMulti] = useState<boolean>(false);
   const [modal, setModal] = useState<boolean>(false);
@@ -114,7 +125,6 @@ const CrmContacts = () => {
     }
   }, [modal]);
 
-  // Delete Data
   const handleDeleteContact = () => {
     if (contact) {
       dispatch(onDeleteContact(contact.id));
@@ -122,24 +132,20 @@ const CrmContacts = () => {
     }
   };
 
-  const onClickDelete = (contact: any) => {
-    setContact(contact);
+  const onClickDelete = (c: any) => {
+    setContact(c);
     setDeleteModal(true);
   };
 
-  // Date & Time Format
-
+  // Formik (se conserva para el modal de alta/edición si lo quieres usar)
   const dateFormat = () => {
-    var d = new Date(),
-      months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const d = new Date();
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     return (d.getDate() + ' ' + months[d.getMonth()] + ', ' + d.getFullYear());
   };
 
-  // validation
   const validation: any = useFormik({
-    // enableReinitialize : use this flag when initial values needs to be changed
     enableReinitialize: true,
-
     initialValues: {
       id: (contact && contact.id) || '',
       img: (contact && contact.img) || '',
@@ -172,10 +178,8 @@ const CrmContacts = () => {
           phone: values.phone,
           score: values.score,
           date: dateFormat(),
-          // time: timeFormat(),
           tags: assignTag,
         };
-        // update Contact
         dispatch(onUpdateContact(updateContact));
         validation.resetForm();
       } else {
@@ -189,10 +193,8 @@ const CrmContacts = () => {
           phone: values["phone"],
           score: values["score"],
           date: dateFormat(),
-          // time: timeFormat(),
           tags: assignTag,
         };
-        // save new Contact
         dispatch(onAddNewContact(newContact));
         validation.resetForm();
       }
@@ -200,68 +202,41 @@ const CrmContacts = () => {
     },
   });
 
-  // Update Data
   const handleContactClick = useCallback((arg: any) => {
-    const contact = arg;
-
+    const c = arg;
     setContact({
-      id: contact.id,
-      img: contact.img,
-      name: contact.name,
-      company: contact.company,
-      email: contact.email,
-      designation: contact.designation,
-      phone: contact.phone,
-      score: contact.score,
-      date: contact.date,
-      // time: contact.time,
-      tags: contact.tags,
+      id: c.id,
+      img: c.img,
+      name: c.name,
+      company: c.company,
+      email: c.email,
+      designation: c.designation,
+      phone: c.phone,
+      score: c.score,
+      date: c.date,
+      tags: c.tags,
     });
-
     setIsEdit(true);
     toggle();
   }, [toggle]);
 
-  const handleValidDate = (date: any) => {
-    const date1 = moment(new Date(date)).format("DD MMM Y");
-    return date1;
-  };
+  const handleRowClick = useCallback((rowData: any) => {
+    setInfo(rowData);
+  }, []);
 
-  const handleValidTime = (time: any) => {
-    const time1 = new Date(time);
-    const getHour = time1.getUTCHours();
-    const getMin = time1.getUTCMinutes();
-    const getTime = `${getHour}:${getMin}`;
-    var meridiem = "";
-    if (getHour >= 12) {
-      meridiem = "PM";
-    } else {
-      meridiem = "AM";
-    }
-    const updateTime = moment(getTime, 'hh:mm').format('hh:mm') + " " + meridiem;
-    return updateTime;
-  };
-
-
-  // Checked All
+  // Checked All / Delete Multiple (se conserva)
   const checkedAll = useCallback(() => {
     const checkall: any = document.getElementById("checkBoxAll");
     const ele = document.querySelectorAll(".contactCheckBox");
-
-    if (checkall.checked) {
-      ele.forEach((ele: any) => {
-        ele.checked = true;
-      });
+    if (checkall?.checked) {
+      ele.forEach((e: any) => { e.checked = true; });
     } else {
-      ele.forEach((ele: any) => {
-        ele.checked = false;
-      });
+      ele.forEach((e: any) => { e.checked = false; });
     }
     deleteCheckbox();
   }, []);
 
-  // Delete Multiple
-  const [selectedCheckBoxDelete, setSelectedCheckBoxDelete] = useState([]);
+  const [selectedCheckBoxDelete, setSelectedCheckBoxDelete] = useState([] as any[]);
   const [isMultiDeleteButton, setIsMultiDeleteButton] = useState<boolean>(false);
 
   const deleteMultiple = () => {
@@ -271,7 +246,7 @@ const CrmContacts = () => {
       setTimeout(() => { toast.clearWaitingQueue(); }, 3000);
     });
     setIsMultiDeleteButton(false);
-    checkall.checked = false;
+    if (checkall) checkall.checked = false;
   };
 
   const deleteCheckbox = () => {
@@ -280,7 +255,7 @@ const CrmContacts = () => {
     setSelectedCheckBoxDelete(ele);
   };
 
-  // Column
+  // Columnas — ajustadas a tu pedido
   const columns = useMemo(
     () => [
       {
@@ -297,12 +272,22 @@ const CrmContacts = () => {
         header: "Name",
         accessorKey: "name",
         enableColumnFilter: false,
-        cell: (cell: any) => (
-          <>
-            <div className="d-flex align-items-center">
+        cell: (cell: any) => {
+          const rowData = cell.row.original;
+          return (
+            <div
+              className="d-flex align-items-center"
+              role="button"
+              tabIndex={0}
+              onClick={() => handleRowClick(rowData)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") handleRowClick(rowData);
+              }}
+              style={{ cursor: "pointer" }}
+            >
               <div className="flex-shrink-0">
                 <img
-                  src={cell.row.original.img}
+                  src={rowData.img || dummyImg}
                   alt=""
                   className="avatar-xs rounded-circle"
                 />
@@ -311,14 +296,10 @@ const CrmContacts = () => {
                 {cell.getValue()}
               </div>
             </div>
-          </>
-        ),
+          );
+        },
       },
-      {
-        header: "Company",
-        accessorKey: "company",
-        enableColumnFilter: false,
-      },
+      // ❌ Company eliminado
       {
         header: "Email ID",
         accessorKey: "email",
@@ -330,31 +311,28 @@ const CrmContacts = () => {
         enableColumnFilter: false,
       },
       {
-        header: "Lead Score",
-        accessorKey: "score",
+        header: "Cantidad servicios",
+        accessorKey: "cantidadServicios",
         enableColumnFilter: false,
+        cell: (cell: any) => {
+          const row = cell.row.original;
+          const count = Array.isArray(row.tags) ? row.tags.length : 0;
+          return <span>{count}</span>;
+        }
       },
       {
-        header: "Tags",
+        header: "Últimos servicios",
         accessorKey: "tags",
         enableColumnFilter: false,
         cell: (cell: any) => (
           <>
-            {cell.getValue().map((item: any, key: any) => (<span className="badge bg-primary-subtle text-primary me-1" key={key}>{item}</span>))}
+            {(cell.getValue() || []).map((item: any, key: any) => (
+              <span className="badge bg-primary-subtle text-primary me-1" key={key}>{item}</span>
+            ))}
           </>
         ),
       },
-      {
-        header: "Last Contacted",
-        accessorKey: "date",
-        enableColumnFilter: false,
-        cell: (cell: any) => (
-          <>
-            {handleValidDate(cell.getValue())},{" "}
-            <small className="text-muted">{handleValidTime(cell.getValue())}</small>
-          </>
-        ),
-      },
+      // ❌ Last Contacted eliminado
       {
         header: "Action",
         cell: (cellProps: any) => {
@@ -410,19 +388,17 @@ const CrmContacts = () => {
         },
       },
     ],
-    [handleContactClick, checkedAll]
+    [handleContactClick, checkedAll, handleRowClick]
   );
 
-
+  // Tags para el modal (si lo usas)
   const [tag, setTag] = useState<any>();
   const [assignTag, setAssignTag] = useState<any>([]);
-
   const handlestag = (tags: any) => {
     setTag(tags);
     const assigned = tags.map((item: any) => item.value);
     setAssignTag(assigned);
   };
-
   const tags = [
     { label: "Exiting", value: "Exiting" },
     { label: "Lead", value: "Lead" },
@@ -430,20 +406,17 @@ const CrmContacts = () => {
     { label: "Partner", value: "Partner" }
   ];
 
-  // Image Validation
+  // Imagen para el modal
   const [imgStore, setImgStore] = useState<any>();
   const [selectedImage, setSelectedImage] = useState<any>();
-
   const handleClick = (item: any) => {
-    const newData = [...imgStore, item];
+    const newData = [...(imgStore || []), item];
     setImgStore(newData);
     validation.setFieldValue('img', newData);
   };
-
   useEffect(() => {
     setImgStore((contact && contact.img) || []);
   }, [contact]);
-
   const handleImageChange = (event: any) => {
     const file = event.target.files[0];
     const reader = new FileReader();
@@ -454,10 +427,7 @@ const CrmContacts = () => {
     reader.readAsDataURL(file);
   };
 
-  // SideBar Contact Deatail
-  const [info, setInfo] = useState<any>([]);
-
-  // Export Modal
+  // Export
   const [isExportCSV, setIsExportCSV] = useState<boolean>(false);
 
   document.title = "Contacts | Velzon - React Admin & Dashboard Template";
@@ -467,7 +437,7 @@ const CrmContacts = () => {
         <ExportCSVModal
           show={isExportCSV}
           onCloseClick={() => setIsExportCSV(false)}
-          data={crmcontacts}
+          data={lauraData}
         />
         <DeleteModal
           show={deleteModal}
@@ -483,7 +453,7 @@ const CrmContacts = () => {
           onCloseClick={() => setDeleteModalMulti(false)}
         />
         <Container fluid>
-          <BreadCrumb title="Contacts" pageTitle="CRM" />
+          <BreadCrumb title="Crm y campañas" pageTitle="CRM" />
           <Row>
             <Col lg={12}>
               <Card>
@@ -492,24 +462,22 @@ const CrmContacts = () => {
                     <div className="flex-grow-1">
                       <button
                         className="btn btn-primary add-btn"
-                        onClick={() => {
-                          setModal(true);
-                        }}
+                        onClick={() => { setModal(true); }}
                       >
-                        <i className="ri-add-fill me-1 align-bottom"></i> Add
-                        Contacts
+                        <i className="ri-add-fill me-1 align-bottom"></i> Agregar cliente
                       </button>
                     </div>
                     <div className="flex-shrink-0">
                       <div className="hstack text-nowrap gap-2">
-                        {isMultiDeleteButton && <button className="btn btn-soft-danger" id="remove-actions"
-                          onClick={() => setDeleteModalMulti(true)}
-                        ><i className="ri-delete-bin-2-line"></i></button>}
+                        {isMultiDeleteButton && (
+                          <button className="btn btn-soft-danger" id="remove-actions"
+                            onClick={() => setDeleteModalMulti(true)}
+                          ><i className="ri-delete-bin-2-line"></i></button>
+                        )}
                         <button className="btn btn-secondary">
-                          <i className="ri-filter-2-line me-1 align-bottom"></i>{" "}
-                          Filters
+                          <i className="ri-filter-2-line me-1 align-bottom"></i> Filters
                         </button>
-                        <button className="btn btn-soft-success" onClick={() => setIsExportCSV(true)}>Export</button>
+                        <button className="btn btn-soft-success" onClick={() => setIsExportCSV(true)}>Importar</button>
 
                         <UncontrolledDropdown>
                           <DropdownToggle
@@ -526,21 +494,21 @@ const CrmContacts = () => {
                             <DropdownItem className="dropdown-item" href="#">Last Year</DropdownItem>
                           </DropdownMenu>
                         </UncontrolledDropdown>
-
                       </div>
                     </div>
                   </div>
                 </CardHeader>
               </Card>
             </Col>
+
             <Col xxl={9}>
               <Card id="contactList">
                 <CardBody className="pt-0">
                   <div>
-                    {crmcontacts && crmcontacts.length > 0 ? (
+                    {lauraData && lauraData.length > 0 ? (
                       <TableContainer
                         columns={columns}
-                        data={(crmcontacts || [])}
+                        data={lauraData}
                         isGlobalFilter={true}
                         customPageSize={8}
                         divClass="table-responsive table-card mb-3"
@@ -548,15 +516,14 @@ const CrmContacts = () => {
                         theadClass="table-light"
                         isContactsFilter={true}
                       />
-                    ) : (<Loader error={error} />)
-                    }
+                    ) : (<Loader error={error} />)}
                   </div>
 
+                  {/* Modal de alta/edición (opcional) */}
                   <Modal id="showModal" isOpen={modal} toggle={toggle} centered>
                     <ModalHeader className="bg-primary-subtle p-3" toggle={toggle}>
                       {!!isEdit ? "Edit Contact" : "Add Contact"}
                     </ModalHeader>
-
                     <Form className="tablelist-form" onSubmit={(e) => {
                       e.preventDefault();
                       validation.handleSubmit();
@@ -568,7 +535,7 @@ const CrmContacts = () => {
                           <Col lg={12}>
                             <div className="text-center">
                               <div className="position-relative d-inline-block">
-                                <div className="position-absolute  bottom-0 end-0">
+                                <div className="position-absolute bottom-0 end-0">
                                   <Label htmlFor="customer-image-input" className="mb-0">
                                     <div className="avatar-xs cursor-pointer">
                                       <div className="avatar-title bg-light border rounded-circle text-muted">
@@ -578,9 +545,7 @@ const CrmContacts = () => {
                                   </Label>
                                   <Input className="form-control d-none" id="customer-image-input" type="file"
                                     accept="image/png, image/gif, image/jpeg" onChange={handleImageChange}
-                                    invalid={
-                                      validation.touched.img && validation.errors.img ? true : false
-                                    }
+                                    invalid={validation.touched.img && validation.errors.img ? true : false}
                                   />
                                 </div>
                                 <div className="avatar-lg p-1" onClick={(item: any) => handleClick(item)}>
@@ -595,238 +560,47 @@ const CrmContacts = () => {
                             </div>
 
                             <div>
-                              <Label
-                                htmlFor="name-field"
-                                className="form-label"
-                              >
-                                Name
-                              </Label>
+                              <Label htmlFor="name-field" className="form-label">Name</Label>
                               <Input
                                 name="name"
                                 id="customername-field"
                                 className="form-control"
                                 placeholder="Enter Name"
                                 type="text"
-                                validate={{
-                                  required: { value: true },
-                                }}
                                 onChange={validation.handleChange}
                                 onBlur={validation.handleBlur}
                                 value={validation.values.name || ""}
-                                invalid={
-                                  validation.touched.name && validation.errors.name ? true : false
-                                }
+                                invalid={validation.touched.name && validation.errors.name ? true : false}
                               />
                               {validation.touched.name && validation.errors.name ? (
                                 <FormFeedback type="invalid">{validation.errors.name}</FormFeedback>
                               ) : null}
-
                             </div>
                           </Col>
-                          <Col lg={12}>
-                            <div>
-                              <Label
-                                htmlFor="company_name-field"
-                                className="form-label"
-                              >
-                                Company Name
-                              </Label>
-                              <Input
-                                name="company"
-                                id="company_name-field"
-                                className="form-control"
-                                placeholder="Enter Company Name"
-                                type="text"
-                                validate={{
-                                  required: { value: true },
-                                }}
-                                onChange={validation.handleChange}
-                                onBlur={validation.handleBlur}
-                                value={validation.values.company || ""}
-                                invalid={
-                                  validation.touched.company && validation.errors.company ? true : false
-                                }
-                              />
-                              {validation.touched.company && validation.errors.company ? (
-                                <FormFeedback type="invalid">{validation.errors.company}</FormFeedback>
-                              ) : null}
-
-                            </div>
-                          </Col>
-
-                          <Col lg={12}>
-                            <div>
-                              <Label
-                                htmlFor="designation-field"
-                                className="form-label"
-                              >
-                                Designation
-                              </Label>
-
-                              <Input
-                                name="designation"
-                                id="designation-field"
-                                className="form-control"
-                                placeholder="Enter Designation"
-                                type="text"
-                                validate={{
-                                  required: { value: true },
-                                }}
-                                onChange={validation.handleChange}
-                                onBlur={validation.handleBlur}
-                                value={validation.values.designation || ""}
-                                invalid={
-                                  validation.touched.designation && validation.errors.designation ? true : false
-                                }
-                              />
-                              {validation.touched.designation && validation.errors.designation ? (
-                                <FormFeedback type="invalid">{validation.errors.designation}</FormFeedback>
-                              ) : null}
-
-                            </div>
-                          </Col>
-
-                          <Col lg={12}>
-                            <div>
-                              <Label
-                                htmlFor="emailid-field"
-                                className="form-label"
-                              >
-                                Email ID
-                              </Label>
-
-                              <Input
-                                name="email"
-                                id="emailid-field"
-                                className="form-control"
-                                placeholder="Enter Email"
-                                type="text"
-                                validate={{
-                                  required: { value: true },
-                                }}
-                                onChange={validation.handleChange}
-                                onBlur={validation.handleBlur}
-                                value={validation.values.email || ""}
-                                invalid={
-                                  validation.touched.email && validation.errors.email ? true : false
-                                }
-                              />
-                              {validation.touched.email && validation.errors.email ? (
-                                <FormFeedback type="invalid">{validation.errors.email}</FormFeedback>
-                              ) : null}
-
-                            </div>
-                          </Col>
-                          <Col lg={6}>
-                            <div>
-                              <Label
-                                htmlFor="phone-field"
-                                className="form-label"
-                              >
-                                Phone
-                              </Label>
-
-                              <Input
-                                name="phone"
-                                id="phone-field"
-                                className="form-control"
-                                placeholder="Enter Phone No."
-                                type="text"
-                                validate={{
-                                  required: { value: true },
-                                }}
-                                onChange={validation.handleChange}
-                                onBlur={validation.handleBlur}
-                                value={validation.values.phone || ""}
-                                invalid={
-                                  validation.touched.phone && validation.errors.phone ? true : false
-                                }
-                              />
-                              {validation.touched.phone && validation.errors.phone ? (
-                                <FormFeedback type="invalid">{validation.errors.phone}</FormFeedback>
-                              ) : null}
-                            </div>
-                          </Col>
-                          <Col lg={6}>
-                            <div>
-                              <Label
-                                htmlFor="score-field"
-                                className="form-label"
-                              >
-                                Lead Score
-                              </Label>
-
-                              <Input
-                                name="score"
-                                id="score-field"
-                                className="form-control"
-                                placeholder="Enter Lead Score"
-                                type="text"
-                                validate={{
-                                  required: { value: true },
-                                }}
-                                onChange={validation.handleChange}
-                                onBlur={validation.handleBlur}
-                                value={validation.values.score || ""}
-                                invalid={
-                                  validation.touched.score && validation.errors.score ? true : false
-                                }
-                              />
-                              {validation.touched.score && validation.errors.score ? (
-                                <FormFeedback type="invalid">{validation.errors.score}</FormFeedback>
-                              ) : null}
-                            </div>
-                          </Col>
-                          <Col lg={12}>
-                            <div>
-                              <Label
-                                htmlFor="taginput-choices"
-                                className="form-label font-size-13 text-muted"
-                              >
-                                Tags
-                              </Label>
-                              <Select
-                                isMulti
-                                value={tag}
-                                onChange={(e: any) => {
-                                  handlestag(e);
-                                }}
-                                className="mb-0"
-                                options={tags}
-                                id="taginput-choices"
-                              >
-                              </Select>
-
-                              {validation.touched.tags &&
-                                validation.errors.tags ? (
-                                <FormFeedback type="invalid">
-                                  {validation.errors.tags}
-                                </FormFeedback>
-                              ) : null}
-                            </div>
-                          </Col>
+                          {/* Resto de campos del modal… */}
                         </Row>
                       </ModalBody>
                       <ModalFooter>
                         <div className="hstack gap-2 justify-content-end">
-                          <button type="button" className="btn btn-light" onClick={() => { setModal(false); }} > Close </button>
-                          <button type="submit" className="btn btn-success" id="add-btn"> {!!isEdit ? "Update" : "Add Contact"} </button>
+                          <button type="button" className="btn btn-light" onClick={() => { setModal(false); }} >Close</button>
+                          <button type="submit" className="btn btn-success" id="add-btn">{!!isEdit ? "Update" : "Add Contact"}</button>
                         </div>
                       </ModalFooter>
                     </Form>
                   </Modal>
+
                   <ToastContainer closeButton={false} limit={1} />
                 </CardBody>
               </Card>
             </Col>
 
+            {/* Panel derecho — información de Laura */}
             <Col xxl={3}>
               <Card id="contact-view-detail">
                 <CardBody className="text-center">
                   <div className="position-relative d-inline-block">
                     <img
                       src={info.img || avatar10}
-                      // process.env.REACT_APP_API_URL + "/images/users/" + 
                       alt=""
                       className="avatar-lg rounded-circle img-thumbnail"
                     />
@@ -834,92 +608,72 @@ const CrmContacts = () => {
                       <span className="visually-hidden"></span>
                     </span>
                   </div>
-                  <h5 className="mt-4 mb-1">{info.name || "Tonya Noble"}</h5>
-                  <p className="text-muted">{info.company || "Nesta Technologies"}</p>
-
+                  <h5 className="mt-4 mb-1">{info.name || "Laura cliente"}</h5>
+                  {/* ❌ Company eliminado */}
                   <ul className="list-inline mb-0">
                     <li className="list-inline-item avatar-xs">
-                      <Link
-                        to="#"
-                        className="avatar-title bg-success-subtle text-success fs-15 rounded"
-                      >
+                      <Link to="#" className="avatar-title bg-success-subtle text-success fs-15 rounded">
                         <i className="ri-phone-line"></i>
                       </Link>
                     </li>
                     <li className="list-inline-item avatar-xs">
-                      <Link
-                        to="#"
-                        className="avatar-title bg-danger-subtle text-danger fs-15 rounded"
-                      >
+                      <Link to="#" className="avatar-title bg-danger-subtle text-danger fs-15 rounded">
                         <i className="ri-mail-line"></i>
                       </Link>
                     </li>
                     <li className="list-inline-item avatar-xs">
-                      <Link
-                        to="#"
-                        className="avatar-title bg-warning-subtle text-warning fs-15 rounded"
-                      >
+                      <Link to="#" className="avatar-title bg-warning-subtle text-warning fs-15 rounded">
                         <i className="ri-question-answer-line"></i>
                       </Link>
                     </li>
                   </ul>
                 </CardBody>
+
                 <CardBody>
-                  <h6 className="text-muted text-uppercase fw-semibold mb-3">
-                    Personal Information
-                  </h6>
-                  <p className="text-muted mb-4">
-                    Hello, I'm {info.name || "Tonya Noble"}, The most effective objective is one
-                    that is tailored to the job you are applying for. It states
-                    what kind of career you are seeking, and what skills and
-                    experiences.
-                  </p>
+                  <h6 className="text-muted text-uppercase fw-semibold mb-3">Información personal</h6>
+
                   <div className="table-responsive table-card">
                     <Table className="table table-borderless mb-0">
                       <tbody>
                         <tr>
-                          <td className="fw-medium">
-                            Designation
-                          </td>
-                          <td>Lead Designer / Developer</td>
+                          <td className="fw-medium">Email</td>
+                          <td>{info.email || "laura@cliente.com"}</td>
                         </tr>
                         <tr>
-                          <td className="fw-medium">
-                            Email ID
-                          </td>
-                          <td>{info.email || "tonyanoble@velzon.com"}</td>
+                          <td className="fw-medium">Teléfono</td>
+                          <td>{info.phone || "3112244567"}</td>
                         </tr>
                         <tr>
-                          <td className="fw-medium">
-                            Phone No
-                          </td>
-                          <td>{info.phone || "414-453-5725"}</td>
-                        </tr>
-                        <tr>
-                          <td className="fw-medium">
-                            Lead Score
-                          </td>
-                          <td>{info.score || "154"}</td>
-                        </tr>
-                        <tr>
-                          <td className="fw-medium">
-                            Tags
-                          </td>
+                          <td className="fw-medium">Últimos servicios</td>
                           <td>
-                            {(info.tags || ["Lead", "Partner"]).map((item: any, key: any) => (<span className="badge bg-primary-subtle text-primary me-1" key={key}>{item}</span>))}
+                            {(info.tags || ["Corte hombre"]).map((item: any, key: any) => (
+                              <span className="badge bg-primary-subtle text-primary me-1" key={key}>{item}</span>
+                            ))}
                           </td>
                         </tr>
                         <tr>
-                          <td className="fw-medium">
-                            Last Contacted
-                          </td>
-                          <td>
-                            {handleValidDate(info.date || "2021-04-13T18:30:00.000Z")}{" "}
-                            <small className="text-muted">{handleValidTime(info.date || "2021-04-13T18:30:00.000Z")}</small>
-                          </td>
+                          <td className="fw-medium">Cantidad servicios</td>
+                          <td>{Array.isArray(info.tags) ? info.tags.length : 1}</td>
                         </tr>
                       </tbody>
                     </Table>
+                  </div>
+
+                  <div className="d-flex gap-2 mt-3">
+                    <a
+                      href={`mailto:${info.email || "laura@cliente.com"}`}
+                      className="btn btn-danger btn-sm"
+                    >
+                      Enviar email
+                    </a>
+                    <a
+                      href={`https://wa.me/${(info.phone || "3112244567").replace(/\D/g, "").startsWith("57") ? (info.phone || "3112244567").replace(/\D/g, "") : "57" + (info.phone || "3112244567").replace(/\D/g, "")}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn btn-success btn-sm"
+                    >
+                      Enviar WhatsApp
+                    </a>
                   </div>
                 </CardBody>
               </Card>

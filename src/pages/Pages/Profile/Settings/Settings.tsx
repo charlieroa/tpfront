@@ -1,7 +1,6 @@
-// src/pages/Settings/index.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Card, CardBody, CardHeader, Col, Container, Form, Input, Label,
+  Card, CardBody, CardHeader, Col, Container, Input, Label,
   Nav, NavItem, NavLink, Row, TabContent, TabPane, Alert, Button, Spinner,
   Modal, ModalHeader, ModalBody, ModalFooter, Table, Badge,
   Pagination, PaginationItem, PaginationLink
@@ -10,21 +9,16 @@ import classnames from "classnames";
 import { jwtDecode } from "jwt-decode";
 
 import progileBg from '../../../../assets/images/profile-bg.jpg';
-import avatar1 from '../../../../assets/images/users/avatar-1.jpg'; // Usaremos este como placeholder de logo
+import avatar1 from '../../../../assets/images/users/avatar-1.jpg';
 
 import { api } from "../../../../services/api";
 import { getToken } from "../../../../services/auth";
 
-// ——— NUEVO: Vista separada de Personal ———
+// Vistas hijas
 import Personal from "../../../../pages/Pages/Profile/Settings/personal";
+import DatosTenant, { DayKey, DayState, WorkingHoursPerDay } from "../../../../pages/Pages/Profile/Settings/datostenant";
 
-/* =========================
-   Tipos (solo los que usa Settings)
-========================= */
-type DayKey = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
-type DayState = { active: boolean; start: string; end: string };
-type WorkingHoursPerDay = Record<DayKey, DayState>;
-
+/* ================= Tipos ================= */
 type Tenant = {
   id: string;
   name?: string | null;
@@ -40,9 +34,7 @@ type Tenant = {
   created_at?: string;
   updated_at?: string;
 };
-
 type Category = { id: string; name: string; created_at?: string; updated_at?: string; };
-
 type Service = {
   id: string;
   tenant_id?: string;
@@ -54,9 +46,7 @@ type Service = {
   is_active?: boolean;
 };
 
-/* =========================
-   Constantes & helpers
-========================= */
+/* =============== Constantes & helpers =============== */
 const DAYS: { key: DayKey; label: string }[] = [
   { key: "monday",    label: "Lunes" },
   { key: "tuesday",   label: "Martes" },
@@ -66,7 +56,6 @@ const DAYS: { key: DayKey; label: string }[] = [
   { key: "saturday",  label: "Sábado" },
   { key: "sunday",    label: "Domingo" },
 ];
-
 const DEFAULT_DAY: DayState = { active: false, start: "09:00", end: "17:00" };
 const defaultWeek = (): WorkingHoursPerDay => ({
   monday:    { ...DEFAULT_DAY },
@@ -77,7 +66,6 @@ const defaultWeek = (): WorkingHoursPerDay => ({
   saturday:  { ...DEFAULT_DAY },
   sunday:    { ...DEFAULT_DAY },
 });
-
 const pad2 = (n: number) => (n < 10 ? `0${n}` : `${n}`);
 const toTime = (raw: string): string => {
   const s = (raw || "").trim();
@@ -120,7 +108,6 @@ const validateWorkingHours = (perDay: WorkingHoursPerDay): string | null => {
   }
   return null;
 };
-
 const decodeTenantId = (): string | null => {
   try {
     const t = getToken();
@@ -131,9 +118,7 @@ const decodeTenantId = (): string | null => {
 };
 const ensureNumber = (v: string) => (v.trim() === "" ? null : Number(v));
 
-/* =========================
-   Modal Servicio (crear/editar)
-========================= */
+/* =============== Modal Servicio =============== */
 const ServiceModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
@@ -144,13 +129,11 @@ const ServiceModal: React.FC<{
   edit?: Service | null;
 }> = ({ isOpen, onClose, onSaved, categories, onCategoryCreated, tenantId, edit }) => {
   const [saving, setSaving] = useState(false);
-
   const [categoryId, setCategoryId] = useState<string>(edit?.category_id || (categories[0]?.id || ""));
   const [name, setName] = useState<string>(edit?.name || "");
   const [price, setPrice] = useState<string>(edit ? String(edit.price) : "");
   const [duration, setDuration] = useState<string>(edit ? String(edit.duration_minutes) : "");
   const [description, setDescription] = useState<string>(edit?.description || "");
-
   const [creatingCat, setCreatingCat] = useState(false);
   const [newCatName, setNewCatName] = useState("");
 
@@ -177,15 +160,12 @@ const ServiceModal: React.FC<{
     try {
       setSaving(true);
       const { data } = await api.post('/categories', { name: newCatName.trim() });
-      setCreatingCat(false);
-      setNewCatName("");
+      setCreatingCat(false); setNewCatName("");
       onCategoryCreated(data);
       setCategoryId(data.id);
     } catch (e:any) {
       alert(e?.response?.data?.message || e?.message || 'No se pudo crear la categoría');
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   };
 
   const save = async () => {
@@ -208,13 +188,10 @@ const ServiceModal: React.FC<{
         body.tenant_id = tenantId;
         await api.post(`/services`, body);
       }
-      onSaved();
-      onClose();
+      onSaved(); onClose();
     } catch (e:any) {
       alert(e?.response?.data?.message || e?.message || 'No se pudo guardar el servicio');
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   };
 
   return (
@@ -227,9 +204,7 @@ const ServiceModal: React.FC<{
             <div className="d-flex flex-wrap gap-2 align-items-center">
               {categories.length === 0 && <span className="text-muted">No hay categorías. Crea una nueva.</span>}
               {categories.map(c => (
-                <Badge
-                  key={c.id}
-                  pill
+                <Badge key={c.id} pill
                   color={c.id === categoryId ? "primary" : "light"}
                   className={c.id === categoryId ? "" : "text-dark"}
                   style={{ cursor: 'pointer' }}
@@ -238,12 +213,7 @@ const ServiceModal: React.FC<{
                   {c.name}
                 </Badge>
               ))}
-              <Button
-                type="button"
-                color={creatingCat ? "soft-secondary" : "secondary"}
-                size="sm"
-                onClick={() => setCreatingCat(v => !v)}
-              >
+              <Button type="button" color={creatingCat ? "soft-secondary" : "secondary"} size="sm" onClick={() => setCreatingCat(v => !v)}>
                 {creatingCat ? "Cancelar" : "Nueva categoría"}
               </Button>
             </div>
@@ -259,17 +229,14 @@ const ServiceModal: React.FC<{
             <Label className="form-label">Nombre del servicio</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej: Corte para Dama" />
           </Col>
-
           <Col md={6}>
             <Label className="form-label">Duración (minutos)</Label>
             <Input type="number" min={1} value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="Ej: 60" />
           </Col>
-
           <Col md={6}>
             <Label className="form-label">Precio</Label>
             <Input type="number" min={0} step="1" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Ej: 50000" />
           </Col>
-
           <Col md={12}>
             <Label className="form-label">Descripción (opcional)</Label>
             <Input type="textarea" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
@@ -278,17 +245,13 @@ const ServiceModal: React.FC<{
       </ModalBody>
       <ModalFooter>
         <Button color="secondary" onClick={onClose}>Cancelar</Button>
-        <Button color="primary" onClick={save}>
-          Guardar
-        </Button>
+        <Button color="primary" onClick={save}>Guardar</Button>
       </ModalFooter>
     </Modal>
   );
 };
 
-/* =========================
-   Página Settings
-========================= */
+/* ================= Página Settings ================= */
 const Settings: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"1" | "2" | "3" | "4">("1");
 
@@ -298,7 +261,7 @@ const Settings: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
-  // Datos peluquería (pares por fila)
+  // Datos peluquería
   const [name, setName] = useState<string>("");
   const [phone, setPhone] = useState<string>("");
   const [address, setAddress] = useState<string>("");
@@ -312,16 +275,16 @@ const Settings: React.FC = () => {
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState<boolean>(false);
 
+  // Horarios (estado aquí; UI en DatosTenant)
   const [perDay, setPerDay] = useState<WorkingHoursPerDay>(defaultWeek());
 
+  // Servicios
   const [catLoading, setCatLoading] = useState(false);
   const [svcLoading, setSvcLoading] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [svModalOpen, setSvModalOpen] = useState(false);
   const [svEdit, setSvEdit] = useState<Service | null>(null);
-
-  // NUEVO: paginación de Servicios
   const SVC_PAGE_SIZE = 6;
   const [svcPage, setSvcPage] = useState<number>(1);
   const totalSvcPages = useMemo(() => Math.max(1, Math.ceil(services.length / SVC_PAGE_SIZE)), [services.length]);
@@ -335,7 +298,7 @@ const Settings: React.FC = () => {
     if (services.length === 0) setSvcPage(1);
   }, [services.length, totalSvcPages]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // NUEVO: conteo de personal para progreso (25%)
+  // Personal (conteo para progreso)
   const [staffCount, setStaffCount] = useState<number>(0);
   const [staffLoading, setStaffLoading] = useState<boolean>(false);
 
@@ -344,16 +307,10 @@ const Settings: React.FC = () => {
   useEffect(() => {
     document.title = "Configuración | Peluquería";
     const load = async () => {
-      setLoading(true);
-      setError(null);
-      setSavedMsg(null);
+      setLoading(true); setError(null); setSavedMsg(null);
       try {
         const tenantId = decodeTenantId();
-        if (!tenantId) {
-          setError("No se encontró el tenant en tu sesión. Inicia sesión nuevamente.");
-          setLoading(false);
-          return;
-        }
+        if (!tenantId) { setError("No se encontró el tenant en tu sesión. Inicia sesión nuevamente."); setLoading(false); return; }
         const { data } = await api.get(`/tenants/${tenantId}`);
         const t: Tenant = data;
 
@@ -371,50 +328,32 @@ const Settings: React.FC = () => {
       } catch (e:any) {
         const msg = e?.response?.data?.message || e?.message || "No se pudo cargar la información.";
         setError(msg);
-      } finally {
-        setLoading(false);
-      }
+      } finally { setLoading(false); }
     };
     load();
   }, []);
 
-  // ===== Logo Handlers =====
-  const openLogoPicker = () => {
-    logoInputRef.current?.click();
-  };
-
+  /* ===== Logo handlers ===== */
+  const openLogoPicker = () => { logoInputRef.current?.click(); };
   const handleLogoFile = async (file: File) => {
-    // Preview inmediato
     const localUrl = URL.createObjectURL(file);
     setLogoUrl(localUrl);
-
-    // Intento de upload (opcional, si tienes endpoint)
     try {
       setUploadingLogo(true);
       const form = new FormData();
       form.append('file', file);
-      // Ajusta la ruta si ya tienes un uploader
-      const { data } = await api.post('/files/upload', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      // Se asume que data.url devuelve la URL pública
+      const { data } = await api.post('/files/upload', form, { headers: { 'Content-Type': 'multipart/form-data' }});
       if (data?.url) setLogoUrl(data.url);
-    } catch {
-      // Si falla, mantenemos el preview local
-    } finally {
-      setUploadingLogo(false);
-    }
+    } catch { /* keep local preview */ }
+    finally { setUploadingLogo(false); }
   };
-
   const onLogoInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (f) handleLogoFile(f);
+    const f = e.target.files?.[0]; if (f) handleLogoFile(f);
   };
 
+  /* ===== Guardado general (datos + horario) ===== */
   const saveAll = async () => {
-    setSaving(true);
-    setError(null);
-    setSavedMsg(null);
+    setSaving(true); setError(null); setSavedMsg(null);
     try {
       const tenantId = tenant?.id || decodeTenantId();
       if (!tenantId) throw new Error("No se encontró el tenant para actualizar.");
@@ -446,29 +385,25 @@ const Settings: React.FC = () => {
       setIvaRate(fresh?.iva_rate == null ? "" : String(fresh.iva_rate));
       setAdminFee(fresh?.admin_fee_percent == null ? "" : String(fresh.admin_fee_percent));
       setLogoUrl(fresh?.logo_url || "");
-
       setPerDay(normalizeWorkingHoursFromAPI(fresh?.working_hours));
 
       setSavedMsg("¡Cambios guardados correctamente!");
     } catch (e:any) {
       const msg = e?.response?.data?.message || e?.message || "No se pudieron guardar los cambios.";
       setError(msg);
-    } finally {
-      setSaving(false);
-      setTimeout(() => setSavedMsg(null), 2500);
-    }
+    } finally { setSaving(false); setTimeout(() => setSavedMsg(null), 2500); }
   };
-
   const handleSaveInfo = async (e?: React.FormEvent) => { e?.preventDefault(); await saveAll(); };
   const handleSaveHours = async (e?: React.FormEvent) => { e?.preventDefault(); await saveAll(); };
 
+  /* ===== Helpers horarios (estado en Settings) ===== */
   const toggleDay = (day: DayKey) => setPerDay(prev => ({ ...prev, [day]: { ...prev[day], active: !prev[day].active } }));
   const changeHour = (day: DayKey, field: "start" | "end", value: string) =>
     setPerDay(prev => ({ ...prev, [day]: { ...prev[day], [field]: value } }));
   const applyMondayToAll = () => {
     const monday = perDay.monday;
     setPerDay(prev => {
-      const next = { ...prev };
+      const next = { ...prev } as WorkingHoursPerDay;
       for (const { key } of DAYS) {
         if (key === "monday") continue;
         next[key] = { ...next[key], active: monday.active, start: monday.start, end: monday.end };
@@ -477,60 +412,36 @@ const Settings: React.FC = () => {
     });
   };
 
-  // ====== Servicios / Categorías ======
+  /* ===== Servicios / Categorías ===== */
   const tenantId = useMemo(() => decodeTenantId() || "", []);
   const loadCategories = async () => {
     setCatLoading(true);
-    try {
-      const { data } = await api.get('/categories');
-      setCategories(data || []);
-    } catch (e:any) {
-      setError(e?.response?.data?.message || e?.message || 'No se pudieron cargar las categorías');
-    } finally {
-      setCatLoading(false);
-    }
+    try { const { data } = await api.get('/categories'); setCategories(data || []); }
+    catch (e:any) { setError(e?.response?.data?.message || e?.message || 'No se pudieron cargar las categorías'); }
+    finally { setCatLoading(false); }
   };
   const loadServices = async () => {
     setSvcLoading(true);
-    try {
-      const { data } = await api.get(`/services/tenant/${tenantId}`);
-      setServices(Array.isArray(data) ? data : []);
-      // Opcional: si prefieres volver siempre a la página 1 al recargar:
-      setSvcPage(1);
-    } catch (e:any) {
-      setError(e?.response?.data?.message || e?.message || 'No se pudieron cargar los servicios');
-    } finally {
-      setSvcLoading(false);
-    }
+    try { const { data } = await api.get(`/services/tenant/${tenantId}`); setServices(Array.isArray(data) ? data : []); setSvcPage(1); }
+    catch (e:any) { setError(e?.response?.data?.message || e?.message || 'No se pudieron cargar los servicios'); }
+    finally { setSvcLoading(false); }
   };
 
-  // ====== NUEVO: cargar personal (solo conteo) ======
+  /* ===== Personal (conteo) ===== */
   const loadStaffCount = async () => {
     if (!tenantId) return;
     setStaffLoading(true);
     try {
-      // Si tu API usa otra convención, ajústala aquí:
-      // Opción A (users con filtro de rol):
       const { data } = await api.get(`/users/tenant/${tenantId}?role=stylist`);
       const list = Array.isArray(data) ? data : [];
       setStaffCount(list.length);
-
-      // Opción B (si usas /staff/tenant/:tenantId), descomenta:
-      // const { data } = await api.get(`/staff/tenant/${tenantId}`);
-      // setStaffCount(Array.isArray(data) ? data.length : 0);
-    } catch (e:any) {
-      // Si falla, no rompemos UI; marcamos 0
-      setStaffCount(0);
-    } finally {
-      setStaffLoading(false);
-    }
+    } catch { setStaffCount(0); }
+    finally { setStaffLoading(false); }
   };
 
   useEffect(() => {
     if (!tenantId) return;
-    loadCategories();
-    loadServices();
-    loadStaffCount();
+    loadCategories(); loadServices(); loadStaffCount();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
@@ -539,50 +450,29 @@ const Settings: React.FC = () => {
   const openEditService = (svc: Service) => { setSvEdit(svc); setSvModalOpen(true); };
   const deleteService = async (svc: Service) => {
     if (!window.confirm(`¿Eliminar el servicio "${svc.name}"?`)) return;
-    try {
-      await api.delete(`/services/${svc.id}`);
-      await loadServices();
-      // El useEffect de servicios ajusta la página si quedara fuera de rango
-    } catch (e:any) {
-      alert(e?.response?.data?.message || e?.message || 'No se pudo eliminar el servicio');
-    }
+    try { await api.delete(`/services/${svc.id}`); await loadServices(); }
+    catch (e:any) { alert(e?.response?.data?.message || e?.message || 'No se pudo eliminar el servicio'); }
   };
 
-  // ====== NUEVO: progreso 4x25% ======
+  /* ===== Progreso 4x25% ===== */
   const progress = useMemo(() => {
-    // 1) Datos
     const datosOk = name.trim() !== "" && address.trim() !== "" && phone.trim() !== "";
-
-    // 2) Horarios (al menos un día activo + sin errores)
     const hasActive = DAYS.some(({ key }) => perDay[key].active);
     const hoursErr = validateWorkingHours(perDay);
     const horariosOk = hasActive && hoursErr === null;
-
-    // 3) Servicios
     const serviciosOk = services.length > 0;
-
-    // 4) Personal
     const personalOk = staffCount > 0;
-
-    const score =
-      (datosOk ? 1 : 0) +
-      (horariosOk ? 1 : 0) +
-      (serviciosOk ? 1 : 0) +
-      (personalOk ? 1 : 0);
-
-    return score * 25; // 0, 25, 50, 75, 100
+    const score = (datosOk ? 1 : 0) + (horariosOk ? 1 : 0) + (serviciosOk ? 1 : 0) + (personalOk ? 1 : 0);
+    return score * 25;
   }, [name, address, phone, perDay, services.length, staffCount]);
 
-  // Render de números de página para Servicios
+  /* ===== Paginación Servicios ===== */
   const renderSvcPageNumbers = () => {
     const windowSize = 5;
     let start = Math.max(1, svcPage - Math.floor(windowSize / 2));
     let end = start + windowSize - 1;
-    if (end > totalSvcPages) {
-      end = totalSvcPages;
-      start = Math.max(1, end - windowSize + 1);
-    }
-    const items = [];
+    if (end > totalSvcPages) { end = totalSvcPages; start = Math.max(1, end - windowSize + 1); }
+    const items: JSX.Element[] = [];
     for (let p = start; p <= end; p++) {
       items.push(
         <PaginationItem key={p} active={p === svcPage}>
@@ -623,7 +513,6 @@ const Settings: React.FC = () => {
                 <div className="text-end p-3">
                   <div className="p-0 ms-auto rounded-circle profile-photo-edit">
                     <Input id="profile-foreground-img-file-input" type="file" className="profile-foreground-img-file-input" />
-                   
                   </div>
                 </div>
               </div>
@@ -635,26 +524,13 @@ const Settings: React.FC = () => {
             <Col xxl={3}>
               <Card className="mt-n5">
                 <CardBody className="p-4 text-center">
-                  {/* BLOQUE DE LOGO EDITABLE */}
                   <div className="profile-user position-relative d-inline-block mx-auto mb-4" style={{ cursor: 'pointer' }} onClick={openLogoPicker} title="Cambiar logo">
-                    <img
-                      src={logoUrl || avatar1}
-                      className="rounded-circle avatar-xl img-thumbnail user-profile-image"
-                      alt="logo"
-                    />
-                    <span
-                      className="position-absolute bottom-0 end-0 bg-primary text-white rounded-circle d-flex align-items-center justify-content-center"
-                      style={{ width: 36, height: 36, border: '2px solid white' }}
-                    >
+                    <img src={logoUrl || avatar1} className="rounded-circle avatar-xl img-thumbnail user-profile-image" alt="logo" />
+                    <span className="position-absolute bottom-0 end-0 bg-primary text-white rounded-circle d-flex align-items-center justify-content-center"
+                          style={{ width: 36, height: 36, border: '2px solid white' }}>
                       <i className="ri-image-edit-line"></i>
                     </span>
-                    <input
-                      ref={logoInputRef}
-                      type="file"
-                      accept="image/*"
-                      className="d-none"
-                      onChange={onLogoInputChange}
-                    />
+                    <input ref={logoInputRef} type="file" accept="image/*" className="d-none" onChange={onLogoInputChange} />
                   </div>
                   <div className="small text-muted mb-2">
                     {uploadingLogo ? "Subiendo logo…" : "Haz clic en el logo para cambiarlo"}
@@ -669,22 +545,14 @@ const Settings: React.FC = () => {
                   <div className="d-flex align-items-center mb-3">
                     <div className="flex-grow-1"><h5 className="card-title mb-0">Avance de configuración</h5></div>
                     <div className="flex-shrink-0">
-                      <span className="badge bg-light text-primary fs-12">
-                        {progress === 100 ? "Completo" : "Parcial"}
-                      </span>
+                      <span className="badge bg-light text-primary fs-12">{progress === 100 ? "Completo" : "Parcial"}</span>
                     </div>
                   </div>
                   <div className="progress animated-progress custom-progress progress-label">
-                    <div
-                      className={`progress-bar ${progress === 100 ? "bg-success" : "bg-warning"}`}
-                      role="progressbar"
-                      style={{ width: `${progress}%` }}
-                    >
+                    <div className={`progress-bar ${progress === 100 ? "bg-success" : "bg-warning"}`} role="progressbar" style={{ width: `${progress}%` }}>
                       <div className="label">{progress}%</div>
                     </div>
                   </div>
-
-                  {/* Opcional: mini leyenda del estado por bloque */}
                   <ul className="list-unstyled mt-3 mb-0">
                     <li className="d-flex align-items-center gap-2">
                       <i className={`ri-checkbox-${(name && phone && address) ? 'circle' : 'blank'}-line`}></i>
@@ -707,7 +575,7 @@ const Settings: React.FC = () => {
               </Card>
             </Col>
 
-            {/* Col derecha: Tabs */}
+            {/* Col derecha: Tabs (4) */}
             <Col xxl={9}>
               <Card className="mt-xxl-n5">
                 <CardHeader>
@@ -719,7 +587,7 @@ const Settings: React.FC = () => {
                     </NavItem>
                     <NavItem>
                       <NavLink className={classnames({ active: activeTab === "2" })} onClick={() => tabChange("2")} role="button">
-                        <i className="ri-time-line"></i>&nbsp; Horarios por día
+                        <i className="ri-time-line"></i>&nbsp; Horario
                       </NavLink>
                     </NavItem>
                     <NavItem>
@@ -740,135 +608,50 @@ const Settings: React.FC = () => {
                   {savedMsg && <Alert color="success" fade={false}>{savedMsg}</Alert>}
 
                   <TabContent activeTab={activeTab}>
-                    {/* TAB 1: Datos de la Peluquería (pares por fila) */}
+                    {/* TAB 1: Datos (usa DatosTenant sección datos) */}
                     <TabPane tabId="1">
-                      <Form onSubmit={handleSaveInfo}>
-                        <Row className="g-3">
-                          <Col lg={6}>
-                            <div className="mb-0">
-                              <Label htmlFor="nameInput" className="form-label">Nombre</Label>
-                              <Input id="nameInput" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej: Bunker Barber Shop" required />
-                            </div>
-                          </Col>
-                          <Col lg={6}>
-                            <div className="mb-0">
-                              <Label htmlFor="phoneInput" className="form-label">Teléfono</Label>
-                              <Input id="phoneInput" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Ej: 3001234567" required />
-                            </div>
-                          </Col>
-
-                          <Col lg={6}>
-                            <div className="mb-0">
-                              <Label htmlFor="addressInput" className="form-label">Dirección</Label>
-                              <Input id="addressInput" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Ej: Calle 123 #45-67" required />
-                            </div>
-                          </Col>
-                          <Col lg={6}>
-                            <div className="mb-0">
-                              <Label htmlFor="emailInput" className="form-label">Email</Label>
-                              <Input id="emailInput" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="contacto@mi-peluqueria.com" />
-                            </div>
-                          </Col>
-
-                          <Col lg={6}>
-                            <div className="mb-0">
-                              <Label htmlFor="websiteInput" className="form-label">Página web</Label>
-                              <Input id="websiteInput" type="url" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://mi-peluqueria.com" />
-                            </div>
-                          </Col>
-                          <Col lg={3}>
-                            <div className="mb-0">
-                              <Label htmlFor="ivaInput" className="form-label">IVA (%)</Label>
-                              <Input id="ivaInput" type="number" min={0} max={100} step="0.01" value={ivaRate} onChange={(e) => setIvaRate(e.target.value)} placeholder="19" />
-                            </div>
-                          </Col>
-                          <Col lg={3}>
-                            <div className="mb-0">
-                              <Label htmlFor="adminFeeInput" className="form-label">% Administrativo</Label>
-                              <Input id="adminFeeInput" type="number" min={0} max={100} step="0.01" value={adminFee} onChange={(e) => setAdminFee(e.target.value)} placeholder="10" />
-                            </div>
-                          </Col>
-
-                          <Col lg={12} className="pt-2">
-                            <div className="hstack gap-2 justify-content-end">
-                              <Button type="submit" color="primary" disabled={saving}>
-                                {saving && <Spinner size="sm" className="me-2" />} Guardar cambios
-                              </Button>
-                              <Button
-                                type="button"
-                                color="soft-success"
-                                onClick={() => {
-                                  setName((tenant?.name ?? "") as string);
-                                  setPhone((tenant?.phone ?? "") as string);
-                                  setAddress((tenant?.address ?? "") as string);
-                                  setEmail((tenant?.email ?? "") as string);
-                                  setWebsite((tenant?.website ?? "") as string);
-                                  setIvaRate(tenant?.iva_rate == null ? "" : String(tenant?.iva_rate));
-                                  setAdminFee(tenant?.admin_fee_percent == null ? "" : String(tenant?.admin_fee_percent));
-                                  setLogoUrl(tenant?.logo_url || "");
-                                  setPerDay(normalizeWorkingHoursFromAPI(tenant?.working_hours));
-                                }}
-                              >
-                                Cancelar
-                              </Button>
-                            </div>
-                          </Col>
-                        </Row>
-                      </Form>
+                      <DatosTenant
+                        section="datos"
+                        name={name} phone={phone} address={address} email={email} website={website}
+                        ivaRate={ivaRate} adminFee={adminFee}
+                        setName={setName} setPhone={setPhone} setAddress={setAddress}
+                        setEmail={setEmail} setWebsite={setWebsite}
+                        setIvaRate={setIvaRate} setAdminFee={setAdminFee}
+                        perDay={perDay} toggleDay={() => {}} changeHour={() => {}} applyMondayToAll={() => {}}
+                        saving={saving}
+                        onSubmit={handleSaveInfo}
+                        onCancel={() => {
+                          setName((tenant?.name ?? "") as string);
+                          setPhone((tenant?.phone ?? "") as string);
+                          setAddress((tenant?.address ?? "") as string);
+                          setEmail((tenant?.email ?? "") as string);
+                          setWebsite((tenant?.website ?? "") as string);
+                          setIvaRate(tenant?.iva_rate == null ? "" : String(tenant?.iva_rate));
+                          setAdminFee(tenant?.admin_fee_percent == null ? "" : String(tenant?.admin_fee_percent));
+                        }}
+                      />
                     </TabPane>
 
-                    {/* TAB 2 */}
+                    {/* TAB 2: Horario (usa DatosTenant sección horario) */}
                     <TabPane tabId="2">
-                      <Form onSubmit={handleSaveHours}>
-                        <Row>
-                          {DAYS.map(({ key, label }) => {
-                            const day = perDay[key];
-                            const isMonday = key === "monday";
-                            return (
-                              <Col lg={12} key={key}>
-                                <div className="border rounded p-3 mb-3">
-                                  <div className="d-flex align-items-center justify-content-between flex-wrap gap-3">
-                                    <div className="form-check form-switch">
-                                      <Input className="form-check-input" type="checkbox" id={`active-${key}`} checked={day.active} onChange={() => toggleDay(key)} />
-                                      <Label className="form-check-label fw-semibold ms-2" htmlFor={`active-${key}`}>
-                                        {label} {day.active ? "(Abierto)" : "(Cerrado)"}
-                                      </Label>
-                                    </div>
-                                    <div className="d-flex align-items-center gap-3">
-                                      <div className="d-flex align-items-center gap-2">
-                                        <Label className="mb-0" htmlFor={`start-${key}`}>Inicio</Label>
-                                        <Input id={`start-${key}`} type="time" value={day.start} disabled={!day.active} onChange={(e) => changeHour(key, "start", e.target.value)} />
-                                      </div>
-                                      <div className="d-flex align-items-center gap-2">
-                                        <Label className="mb-0" htmlFor={`end-${key}`}>Fin</Label>
-                                        <Input id={`end-${key}`} type="time" value={day.end} disabled={!day.active} onChange={(e) => changeHour(key, "end", e.target.value)} />
-                                      </div>
-                                      {isMonday && (
-                                        <Button type="button" size="sm" color="secondary" className="ms-2" onClick={applyMondayToAll}>
-                                          Aplicar a todos
-                                        </Button>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              </Col>
-                            );
-                          })}
-                          <Col lg={12}>
-                            <div className="hstack gap-2 justify-content-end">
-                              <Button type="submit" color="primary" disabled={saving}>
-                                {saving && <Spinner size="sm" className="me-2" />} Guardar horarios
-                              </Button>
-                              <Button type="button" color="soft-success" onClick={() => setPerDay(normalizeWorkingHoursFromAPI(tenant?.working_hours))}>
-                                Cancelar
-                              </Button>
-                            </div>
-                          </Col>
-                        </Row>
-                      </Form>
+                      <DatosTenant
+                        section="horario"
+                        name={name} phone={phone} address={address} email={email} website={website}
+                        ivaRate={ivaRate} adminFee={adminFee}
+                        setName={() => {}} setPhone={() => {}} setAddress={() => {}}
+                        setEmail={() => {}} setWebsite={() => {}}
+                        setIvaRate={() => {}} setAdminFee={() => {}}
+                        perDay={perDay}
+                        toggleDay={toggleDay}
+                        changeHour={changeHour}
+                        applyMondayToAll={applyMondayToAll}
+                        saving={saving}
+                        onSubmit={handleSaveHours}
+                        onCancel={() => setPerDay(normalizeWorkingHoursFromAPI(tenant?.working_hours))}
+                      />
                     </TabPane>
 
-                    {/* TAB 3: Servicios (con paginación SIEMPRE visible) */}
+                    {/* TAB 3: Servicios */}
                     <TabPane tabId="3">
                       <div className="d-flex justify-content-between align-items-center mb-3">
                         <h5 className="mb-0">Servicios</h5>
@@ -920,7 +703,6 @@ const Settings: React.FC = () => {
                         </Table>
                       </div>
 
-                      {/* Controles de paginación — SIEMPRE visibles */}
                       <div className="d-flex justify-content-end">
                         <Pagination className="pagination-separated mb-0">
                           <PaginationItem disabled={svcPage === 1}>
@@ -929,9 +711,7 @@ const Settings: React.FC = () => {
                           <PaginationItem disabled={svcPage === 1}>
                             <PaginationLink previous onClick={() => setSvcPage(p => Math.max(1, p - 1))} />
                           </PaginationItem>
-
                           {renderSvcPageNumbers()}
-
                           <PaginationItem disabled={svcPage === totalSvcPages}>
                             <PaginationLink next onClick={() => setSvcPage(p => Math.min(totalSvcPages, p + 1))} />
                           </PaginationItem>

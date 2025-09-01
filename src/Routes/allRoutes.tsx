@@ -12,7 +12,7 @@ import DashboardPrincipal from "../pages/DashboardPrincipal";
 import Calendar from "../pages/Calendar";
 
 // Estilistas
-import CandidateList from "../pages/Jobs/CandidateList/ListView"; // Lista de Estilistas
+import CandidateList from "../pages/Crm/CrmContacts"; // Lista de Estilistas
 import SimplePage from "../pages/Pages/Profile/SimplePage/SimplePage"; // Detalle de Estilista
 
 // Inventario

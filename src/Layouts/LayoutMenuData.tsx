@@ -51,12 +51,12 @@ const Navdata = () => {
             icon: "ri-archive-line", // Ícono para inventario
             link: "/inventory",
         },
-        {
-            id: "payroll",
-            label: "Nómina",
-            icon: "ri-wallet-3-line", // Ícono para nómina/pagos
-            link: "/payroll",
-        },
+        // {
+        //     id: "payroll",
+        //     label: "Nómina",
+        //     icon: "ri-wallet-3-line", // Ícono para nómina/pagos
+        //     link: "/payroll",
+        // },
 
          {
             id: "settings",
