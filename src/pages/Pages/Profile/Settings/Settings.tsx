@@ -103,7 +103,7 @@ const validateWorkingHours = (perDay: WorkingHoursPerDay): string | null => {
     if (d.active) {
       const [sh, sm] = toTime(d.start).split(":").map(Number);
       const [eh, em] = toTime(d.end).split(":").map(Number);
-      if (eh*60+em <= sh*60+sm) return `El horario de ${label} es inválido: fin debe ser mayor que inicio.`;
+      if (eh * 60 + em <= sh * 60 + sm) return `El horario de ${label} es inválido: fin debe ser mayor que inicio.`;
     }
   }
   return null;
@@ -129,30 +129,32 @@ const ServiceModal: React.FC<{
   edit?: Service | null;
 }> = ({ isOpen, onClose, onSaved, categories, onCategoryCreated, tenantId, edit }) => {
   const [saving, setSaving] = useState(false);
-  const [categoryId, setCategoryId] = useState<string>(edit?.category_id || (categories[0]?.id || ""));
-  const [name, setName] = useState<string>(edit?.name || "");
-  const [price, setPrice] = useState<string>(edit ? String(edit.price) : "");
-  const [duration, setDuration] = useState<string>(edit ? String(edit.duration_minutes) : "");
-  const [description, setDescription] = useState<string>(edit?.description || "");
+  const [categoryId, setCategoryId] = useState<string>("");
+  const [name, setName] = useState<string>("");
+  const [price, setPrice] = useState<string>("");
+  const [duration, setDuration] = useState<string>("");
+  const [description, setDescription] = useState<string>("");
   const [creatingCat, setCreatingCat] = useState(false);
   const [newCatName, setNewCatName] = useState("");
 
   useEffect(() => {
-    if (edit) {
-      setCategoryId(edit.category_id);
-      setName(edit.name);
-      setPrice(String(edit.price));
-      setDuration(String(edit.duration_minutes));
-      setDescription(edit.description || "");
-    } else {
-      setCategoryId(categories[0]?.id || "");
-      setName("");
-      setPrice("");
-      setDuration("");
-      setDescription("");
+    if (isOpen) {
+        if (edit) {
+            setCategoryId(edit.category_id);
+            setName(edit.name);
+            setPrice(String(edit.price));
+            setDuration(String(edit.duration_minutes));
+            setDescription(edit.description || "");
+        } else {
+            setCategoryId(categories[0]?.id || "");
+            setName("");
+            setPrice("");
+            setDuration("");
+            setDescription("");
+        }
+        setCreatingCat(false);
+        setNewCatName("");
     }
-    setCreatingCat(false);
-    setNewCatName("");
   }, [isOpen, edit, categories]);
 
   const createCategoryInline = async () => {
@@ -245,11 +247,15 @@ const ServiceModal: React.FC<{
       </ModalBody>
       <ModalFooter>
         <Button color="secondary" onClick={onClose}>Cancelar</Button>
-        <Button color="primary" onClick={save}>Guardar</Button>
+        <Button color="primary" onClick={save} disabled={saving}>
+            {saving && <Spinner size="sm" className="me-2" />}
+            Guardar
+        </Button>
       </ModalFooter>
     </Modal>
   );
 };
+
 
 /* ================= Página Settings ================= */
 const Settings: React.FC = () => {
@@ -274,8 +280,9 @@ const Settings: React.FC = () => {
   const [logoUrl, setLogoUrl] = useState<string>("");
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState<boolean>(false);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
 
-  // Horarios (estado aquí; UI en DatosTenant)
+  // Horarios
   const [perDay, setPerDay] = useState<WorkingHoursPerDay>(defaultWeek());
 
   // Servicios
@@ -290,69 +297,80 @@ const Settings: React.FC = () => {
   const totalSvcPages = useMemo(() => Math.max(1, Math.ceil(services.length / SVC_PAGE_SIZE)), [services.length]);
   const paginatedServices = useMemo(() => {
     const start = (svcPage - 1) * SVC_PAGE_SIZE;
-    const end = start + SVC_PAGE_SIZE;
-    return services.slice(start, end);
+    return services.slice(start, start + SVC_PAGE_SIZE);
   }, [services, svcPage]);
+  
   useEffect(() => {
-    if (svcPage > totalSvcPages) setSvcPage(totalSvcPages);
-    if (services.length === 0) setSvcPage(1);
-  }, [services.length, totalSvcPages]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (services.length > 0 && svcPage > totalSvcPages) {
+        setSvcPage(totalSvcPages);
+    }
+  }, [services.length, totalSvcPages, svcPage]);
 
-  // Personal (conteo para progreso)
+  // Personal
   const [staffCount, setStaffCount] = useState<number>(0);
   const [staffLoading, setStaffLoading] = useState<boolean>(false);
 
   const tabChange = (tab: "1" | "2" | "3" | "4") => { if (activeTab !== tab) setActiveTab(tab); };
 
+  // =================================================================================
+  // ========================== LÓGICA CENTRALIZADA Y DEFINITIVA =====================
+  // =================================================================================
+
+  // FUNCIÓN AUXILIAR "DEFENSIVA": Maneja tanto URLs relativas como absolutas desde la API.
+  const updateStateFromTenant = (tenantData: Tenant | null) => {
+    if (!tenantData) return;
+
+    setTenant(tenantData);
+    setName(tenantData.name ?? "");
+    setPhone(tenantData.phone ?? "");
+    setAddress(tenantData.address ?? "");
+    setEmail(tenantData.email ?? "");
+    setWebsite(tenantData.website ?? "");
+    setIvaRate(tenantData.iva_rate == null ? "" : String(tenantData.iva_rate));
+    setAdminFee(tenantData.admin_fee_percent == null ? "" : String(tenantData.admin_fee_percent));
+    setPerDay(normalizeWorkingHoursFromAPI(tenantData.working_hours));
+
+    const baseUrl = api.defaults.baseURL;
+    let finalDisplayUrl = "";
+    
+    if (tenantData.logo_url) {
+      // Si la URL que viene de la BD ya es absoluta (está "contaminada"), la usamos tal cual.
+      if (tenantData.logo_url.startsWith('http')) {
+        finalDisplayUrl = tenantData.logo_url;
+      } else {
+        // Si es relativa (el caso correcto), construimos la URL completa.
+        finalDisplayUrl = `${baseUrl}${tenantData.logo_url}`;
+      }
+    }
+    setLogoUrl(finalDisplayUrl);
+  };
+
+  // Carga inicial de datos
   useEffect(() => {
     document.title = "Configuración | Peluquería";
     const load = async () => {
       setLoading(true); setError(null); setSavedMsg(null);
       try {
         const tenantId = decodeTenantId();
-        if (!tenantId) { setError("No se encontró el tenant en tu sesión. Inicia sesión nuevamente."); setLoading(false); return; }
+        if (!tenantId) {
+          setError("No se encontró el tenant en tu sesión. Inicia sesión nuevamente.");
+          return;
+        }
         const { data } = await api.get(`/tenants/${tenantId}`);
-        const t: Tenant = data;
-
-        setTenant(t);
-        setName((t?.name ?? "") as string);
-        setPhone((t?.phone ?? "") as string);
-        setAddress((t?.address ?? "") as string);
-        setEmail((t?.email ?? "") as string);
-        setWebsite((t?.website ?? "") as string);
-        setIvaRate(t?.iva_rate == null ? "" : String(t.iva_rate));
-        setAdminFee(t?.admin_fee_percent == null ? "" : String(t.admin_fee_percent));
-        setLogoUrl(t?.logo_url || "");
-
-        setPerDay(normalizeWorkingHoursFromAPI(t?.working_hours));
-      } catch (e:any) {
-        const msg = e?.response?.data?.message || e?.message || "No se pudo cargar la información.";
-        setError(msg);
-      } finally { setLoading(false); }
+        updateStateFromTenant(data);
+        setLogoFile(null);
+      } catch (e: any) {
+        setError(e?.response?.data?.message || e?.message || "No se pudo cargar la información.");
+      } finally {
+        setLoading(false);
+      }
     };
     load();
   }, []);
 
-  /* ===== Logo handlers ===== */
-  const openLogoPicker = () => { logoInputRef.current?.click(); };
-  const handleLogoFile = async (file: File) => {
-    const localUrl = URL.createObjectURL(file);
-    setLogoUrl(localUrl);
-    try {
-      setUploadingLogo(true);
-      const form = new FormData();
-      form.append('file', file);
-      const { data } = await api.post('/files/upload', form, { headers: { 'Content-Type': 'multipart/form-data' }});
-      if (data?.url) setLogoUrl(data.url);
-    } catch { /* keep local preview */ }
-    finally { setUploadingLogo(false); }
-  };
-  const onLogoInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0]; if (f) handleLogoFile(f);
-  };
-
-  /* ===== Guardado general (datos + horario) ===== */
-  const saveAll = async () => {
+  // FUNCIÓN saveAll "A PRUEBA DE BALAS": Asegura que SIEMPRE se envíe una URL relativa al backend.
+// FUNCIÓN saveAll "A PRUEBA DE BALAS": Ahora se asegura de enviar SIEMPRE una URL relativa al backend.
+const saveAll = async () => {
     setSaving(true); setError(null); setSavedMsg(null);
     try {
       const tenantId = tenant?.id || decodeTenantId();
@@ -361,7 +379,43 @@ const Settings: React.FC = () => {
       const hoursErr = validateWorkingHours(perDay);
       if (hoursErr) { setError(hoursErr); setSaving(false); return; }
 
-      const payload: any = {
+      // Inicializamos la URL para el payload con la URL relativa del estado `tenant`.
+      let logoUrlForPayload = tenant?.logo_url || null;
+
+      // Si la URL en el estado `tenant` está contaminada (es absoluta), la limpiamos.
+      if (logoUrlForPayload && logoUrlForPayload.startsWith('http')) {
+        const baseUrl = api.defaults.baseURL;
+        // CORRECCIÓN PARA TYPESCRIPT: Nos aseguramos que baseUrl exista antes de usarlo.
+        if (baseUrl) {
+          logoUrlForPayload = logoUrlForPayload.replace(baseUrl, '');
+        }
+      }
+
+      // Si se subió un archivo nuevo, este sobreescribe la URL para el payload.
+      if (logoFile) {
+        try {
+          setUploadingLogo(true);
+          const form = new FormData();
+          form.append('logo', logoFile);
+          
+          const { data } = await api.post(`/tenants/${tenantId}/logo`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
+
+          if (data?.url) {
+            logoUrlForPayload = data.url; // La API devuelve una URL relativa, lo cual es correcto.
+            setLogoFile(null);
+          } else {
+            throw new Error("La URL del logo no se recibió correctamente.");
+          }
+        } catch (uploadError: any) {
+          setError(uploadError?.response?.data?.message || uploadError?.message || "No se pudo subir el logo.");
+          setUploadingLogo(false); setSaving(false); return;
+        } finally {
+          setUploadingLogo(false);
+        }
+      }
+
+      // El payload ahora tiene GARANTIZADO que `logo_url` es relativo o nulo.
+      const payload = {
         name: name.trim() || null,
         phone: phone.trim() || null,
         address: address.trim() || null,
@@ -370,31 +424,38 @@ const Settings: React.FC = () => {
         working_hours: buildWorkingHoursPayload(perDay),
         iva_rate: ensureNumber(ivaRate),
         admin_fee_percent: ensureNumber(adminFee),
-        logo_url: logoUrl || null,
+        logo_url: logoUrlForPayload,
       };
 
       await api.put(`/tenants/${tenantId}`, payload);
-      const { data: fresh } = await api.get(`/tenants/${tenantId}`);
+      const { data: freshTenantData } = await api.get(`/tenants/${tenantId}`);
 
-      setTenant(fresh);
-      setName((fresh?.name ?? "") as string);
-      setPhone((fresh?.phone ?? "") as string);
-      setAddress((fresh?.address ?? "") as string);
-      setEmail((fresh?.email ?? "") as string);
-      setWebsite((fresh?.website ?? "") as string);
-      setIvaRate(fresh?.iva_rate == null ? "" : String(fresh.iva_rate));
-      setAdminFee(fresh?.admin_fee_percent == null ? "" : String(fresh.admin_fee_percent));
-      setLogoUrl(fresh?.logo_url || "");
-      setPerDay(normalizeWorkingHoursFromAPI(fresh?.working_hours));
-
+      updateStateFromTenant(freshTenantData);
+      
       setSavedMsg("¡Cambios guardados correctamente!");
-    } catch (e:any) {
-      const msg = e?.response?.data?.message || e?.message || "No se pudieron guardar los cambios.";
-      setError(msg);
-    } finally { setSaving(false); setTimeout(() => setSavedMsg(null), 2500); }
-  };
+    } catch (e: any) {
+      setError(e?.response?.data?.message || e?.message || "No se pudieron guardar los cambios.");
+    } finally {
+      setSaving(false); setTimeout(() => setSavedMsg(null), 2500);
+    }
+};
+
+  // =================================================================================
+  // ========================= FIN DE LA LÓGICA CENTRALIZADA =========================
+  // =================================================================================
+
   const handleSaveInfo = async (e?: React.FormEvent) => { e?.preventDefault(); await saveAll(); };
   const handleSaveHours = async (e?: React.FormEvent) => { e?.preventDefault(); await saveAll(); };
+
+  /* ===== Logo handlers ===== */
+  const openLogoPicker = () => { logoInputRef.current?.click(); };
+  const onLogoInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) {
+      setLogoFile(f);
+      setLogoUrl(URL.createObjectURL(f));
+    }
+  };
 
   /* ===== Helpers horarios (estado en Settings) ===== */
   const toggleDay = (day: DayKey) => setPerDay(prev => ({ ...prev, [day]: { ...prev[day], active: !prev[day].active } }));
@@ -415,15 +476,20 @@ const Settings: React.FC = () => {
   /* ===== Servicios / Categorías ===== */
   const tenantId = useMemo(() => decodeTenantId() || "", []);
   const loadCategories = async () => {
+    if (!tenantId) return;
     setCatLoading(true);
     try { const { data } = await api.get('/categories'); setCategories(data || []); }
-    catch (e:any) { setError(e?.response?.data?.message || e?.message || 'No se pudieron cargar las categorías'); }
+    catch (e: any) { setError(e?.response?.data?.message || e?.message || 'No se pudieron cargar las categorías'); }
     finally { setCatLoading(false); }
   };
   const loadServices = async () => {
+    if (!tenantId) return;
     setSvcLoading(true);
-    try { const { data } = await api.get(`/services/tenant/${tenantId}`); setServices(Array.isArray(data) ? data : []); setSvcPage(1); }
-    catch (e:any) { setError(e?.response?.data?.message || e?.message || 'No se pudieron cargar los servicios'); }
+    try { 
+        const { data } = await api.get(`/services/tenant/${tenantId}`); 
+        setServices(Array.isArray(data) ? data : []); 
+    }
+    catch (e: any) { setError(e?.response?.data?.message || e?.message || 'No se pudieron cargar los servicios'); }
     finally { setSvcLoading(false); }
   };
 
@@ -432,16 +498,20 @@ const Settings: React.FC = () => {
     if (!tenantId) return;
     setStaffLoading(true);
     try {
-      const { data } = await api.get(`/users/tenant/${tenantId}?role=stylist`);
-      const list = Array.isArray(data) ? data : [];
-      setStaffCount(list.length);
-    } catch { setStaffCount(0); }
+      const { data } = await api.get(`/users/tenant/${tenantId}?role_id=3`);
+      setStaffCount(Array.isArray(data) ? data.length : 0);
+    } catch { 
+      setStaffCount(0); 
+    }
     finally { setStaffLoading(false); }
   };
 
   useEffect(() => {
-    if (!tenantId) return;
-    loadCategories(); loadServices(); loadStaffCount();
+    if (tenantId) {
+      loadCategories();
+      loadServices();
+      loadStaffCount();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
@@ -451,12 +521,12 @@ const Settings: React.FC = () => {
   const deleteService = async (svc: Service) => {
     if (!window.confirm(`¿Eliminar el servicio "${svc.name}"?`)) return;
     try { await api.delete(`/services/${svc.id}`); await loadServices(); }
-    catch (e:any) { alert(e?.response?.data?.message || e?.message || 'No se pudo eliminar el servicio'); }
+    catch (e: any) { alert(e?.response?.data?.message || e?.message || 'No se pudo eliminar el servicio'); }
   };
 
   /* ===== Progreso 4x25% ===== */
   const progress = useMemo(() => {
-    const datosOk = name.trim() !== "" && address.trim() !== "" && phone.trim() !== "";
+    const datosOk = !!(name.trim() && address.trim() && phone.trim());
     const hasActive = DAYS.some(({ key }) => perDay[key].active);
     const hoursErr = validateWorkingHours(perDay);
     const horariosOk = hasActive && hoursErr === null;
@@ -468,6 +538,7 @@ const Settings: React.FC = () => {
 
   /* ===== Paginación Servicios ===== */
   const renderSvcPageNumbers = () => {
+    if(totalSvcPages <= 1) return null;
     const windowSize = 5;
     let start = Math.max(1, svcPage - Math.floor(windowSize / 2));
     let end = start + windowSize - 1;
@@ -509,13 +580,6 @@ const Settings: React.FC = () => {
           <div className="position-relative mx-n4 mt-n4">
             <div className="profile-wid-bg profile-setting-img">
               <img src={progileBg} className="profile-wid-img" alt="" />
-              <div className="overlay-content">
-                <div className="text-end p-3">
-                  <div className="p-0 ms-auto rounded-circle profile-photo-edit">
-                    <Input id="profile-foreground-img-file-input" type="file" className="profile-foreground-img-file-input" />
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
 
@@ -533,9 +597,9 @@ const Settings: React.FC = () => {
                     <input ref={logoInputRef} type="file" accept="image/*" className="d-none" onChange={onLogoInputChange} />
                   </div>
                   <div className="small text-muted mb-2">
-                    {uploadingLogo ? "Subiendo logo…" : "Haz clic en el logo para cambiarlo"}
+                    {uploadingLogo ? "Subiendo logo…" : (logoFile ? "Logo listo para guardar" : "Haz clic en el logo para cambiarlo")}
                   </div>
-                  <h5 className="fs-16 mb-1">{tenant?.slug || "Mi peluquería"}</h5>
+                  <h5 className="fs-16 mb-1">{name || "Mi peluquería"}</h5>
                 </CardBody>
               </Card>
 
@@ -555,20 +619,20 @@ const Settings: React.FC = () => {
                   </div>
                   <ul className="list-unstyled mt-3 mb-0">
                     <li className="d-flex align-items-center gap-2">
-                      <i className={`ri-checkbox-${(name && phone && address) ? 'circle' : 'blank'}-line`}></i>
-                      <span>Datos</span>
+                      <i className={`ri-checkbox-${(name && phone && address) ? 'circle-fill text-success' : 'blank-circle-line text-muted'}`}></i>
+                      <span>Datos de la peluquería</span>
                     </li>
                     <li className="d-flex align-items-center gap-2">
-                      <i className={`ri-checkbox-${(DAYS.some(d => perDay[d.key].active) && validateWorkingHours(perDay) === null) ? 'circle' : 'blank'}-line`}></i>
-                      <span>Horarios</span>
+                      <i className={`ri-checkbox-${(DAYS.some(d => perDay[d.key].active) && validateWorkingHours(perDay) === null) ? 'circle-fill text-success' : 'blank-circle-line text-muted'}`}></i>
+                      <span>Horarios de atención</span>
                     </li>
                     <li className="d-flex align-items-center gap-2">
-                      <i className={`ri-checkbox-${(services.length > 0) ? 'circle' : 'blank'}-line`}></i>
-                      <span>Servicios</span>
+                      <i className={`ri-checkbox-${(services.length > 0) ? 'circle-fill text-success' : 'blank-circle-line text-muted'}`}></i>
+                      <span>Servicios creados</span>
                     </li>
                     <li className="d-flex align-items-center gap-2">
-                      <i className={`ri-checkbox-${(staffCount > 0) ? 'circle' : 'blank'}-line`}></i>
-                      <span>Personal {staffLoading && <Spinner size="sm" />}</span>
+                      <i className={`ri-checkbox-${(staffCount > 0) ? 'circle-fill text-success' : 'blank-circle-line text-muted'}`}></i>
+                      <span>Personal registrado {staffLoading && <Spinner size="sm" className="ms-1" />}</span>
                     </li>
                   </ul>
                 </CardBody>
@@ -581,22 +645,22 @@ const Settings: React.FC = () => {
                 <CardHeader>
                   <Nav className="nav-tabs-custom rounded card-header-tabs border-bottom-0" role="tablist">
                     <NavItem>
-                      <NavLink className={classnames({ active: activeTab === "1" })} onClick={() => tabChange("1")} role="button">
+                      <NavLink className={classnames({ active: activeTab === "1" })} onClick={() => tabChange("1")} href="#" role="tab">
                         <i className="fas fa-home"></i>&nbsp; Datos de la peluquería
                       </NavLink>
                     </NavItem>
                     <NavItem>
-                      <NavLink className={classnames({ active: activeTab === "2" })} onClick={() => tabChange("2")} role="button">
+                      <NavLink className={classnames({ active: activeTab === "2" })} onClick={() => tabChange("2")} href="#" role="tab">
                         <i className="ri-time-line"></i>&nbsp; Horario
                       </NavLink>
                     </NavItem>
                     <NavItem>
-                      <NavLink className={classnames({ active: activeTab === "3" })} onClick={() => tabChange("3")} role="button">
+                      <NavLink className={classnames({ active: activeTab === "3" })} onClick={() => tabChange("3")} href="#" role="tab">
                         <i className="ri-scissors-2-line"></i>&nbsp; Servicios
                       </NavLink>
                     </NavItem>
                     <NavItem>
-                      <NavLink className={classnames({ active: activeTab === "4" })} onClick={() => tabChange("4")} role="button">
+                      <NavLink className={classnames({ active: activeTab === "4" })} onClick={() => tabChange("4")} href="#" role="tab">
                         <i className="ri-team-line"></i>&nbsp; Personal
                       </NavLink>
                     </NavItem>
@@ -608,7 +672,7 @@ const Settings: React.FC = () => {
                   {savedMsg && <Alert color="success" fade={false}>{savedMsg}</Alert>}
 
                   <TabContent activeTab={activeTab}>
-                    {/* TAB 1: Datos (usa DatosTenant sección datos) */}
+                    {/* TAB 1: Datos */}
                     <TabPane tabId="1">
                       <DatosTenant
                         section="datos"
@@ -620,19 +684,11 @@ const Settings: React.FC = () => {
                         perDay={perDay} toggleDay={() => {}} changeHour={() => {}} applyMondayToAll={() => {}}
                         saving={saving}
                         onSubmit={handleSaveInfo}
-                        onCancel={() => {
-                          setName((tenant?.name ?? "") as string);
-                          setPhone((tenant?.phone ?? "") as string);
-                          setAddress((tenant?.address ?? "") as string);
-                          setEmail((tenant?.email ?? "") as string);
-                          setWebsite((tenant?.website ?? "") as string);
-                          setIvaRate(tenant?.iva_rate == null ? "" : String(tenant?.iva_rate));
-                          setAdminFee(tenant?.admin_fee_percent == null ? "" : String(tenant?.admin_fee_percent));
-                        }}
+                        onCancel={() => updateStateFromTenant(tenant)}
                       />
                     </TabPane>
 
-                    {/* TAB 2: Horario (usa DatosTenant sección horario) */}
+                    {/* TAB 2: Horario */}
                     <TabPane tabId="2">
                       <DatosTenant
                         section="horario"
@@ -647,7 +703,7 @@ const Settings: React.FC = () => {
                         applyMondayToAll={applyMondayToAll}
                         saving={saving}
                         onSubmit={handleSaveHours}
-                        onCancel={() => setPerDay(normalizeWorkingHoursFromAPI(tenant?.working_hours))}
+                        onCancel={() => updateStateFromTenant(tenant)}
                       />
                     </TabPane>
 
@@ -671,12 +727,12 @@ const Settings: React.FC = () => {
                               <th>Categoría</th>
                               <th>Duración</th>
                               <th>Precio</th>
-                              <th style={{width: 140}}>Acciones</th>
+                              <th style={{width: 100}}>Acciones</th>
                             </tr>
                           </thead>
                           <tbody>
                             {paginatedServices.length === 0 && (
-                              <tr><td colSpan={5} className="text-center text-muted">Sin servicios</td></tr>
+                              <tr><td colSpan={5} className="text-center text-muted py-4">No has creado ningún servicio todavía.</td></tr>
                             )}
                             {paginatedServices.map(s => {
                               const catName = categories.find(c => c.id === s.category_id)?.name || "—";
@@ -685,13 +741,13 @@ const Settings: React.FC = () => {
                                   <td className="fw-semibold">{s.name}</td>
                                   <td><Badge pill color="light" className="text-dark">{catName}</Badge></td>
                                   <td>{s.duration_minutes} min</td>
-                                  <td>${s.price.toLocaleString()}</td>
+                                  <td>${s.price.toLocaleString('es-CO')}</td>
                                   <td>
                                     <div className="d-flex gap-2">
-                                      <Button size="sm" color="soft-primary" onClick={() => openEditService(s)}>
+                                      <Button size="sm" color="soft-primary" onClick={() => openEditService(s)} title="Editar">
                                         <i className="ri-edit-line" />
                                       </Button>
-                                      <Button size="sm" color="soft-danger" onClick={() => deleteService(s)}>
+                                      <Button size="sm" color="soft-danger" onClick={() => deleteService(s)} title="Eliminar">
                                         <i className="ri-delete-bin-line" />
                                       </Button>
                                     </div>
@@ -702,31 +758,35 @@ const Settings: React.FC = () => {
                           </tbody>
                         </Table>
                       </div>
-
-                      <div className="d-flex justify-content-end">
-                        <Pagination className="pagination-separated mb-0">
-                          <PaginationItem disabled={svcPage === 1}>
-                            <PaginationLink first onClick={() => setSvcPage(1)} />
-                          </PaginationItem>
-                          <PaginationItem disabled={svcPage === 1}>
-                            <PaginationLink previous onClick={() => setSvcPage(p => Math.max(1, p - 1))} />
-                          </PaginationItem>
-                          {renderSvcPageNumbers()}
-                          <PaginationItem disabled={svcPage === totalSvcPages}>
-                            <PaginationLink next onClick={() => setSvcPage(p => Math.min(totalSvcPages, p + 1))} />
-                          </PaginationItem>
-                          <PaginationItem disabled={svcPage === totalSvcPages}>
-                            <PaginationLink last onClick={() => setSvcPage(totalSvcPages)} />
-                          </PaginationItem>
-                        </Pagination>
-                      </div>
+                      
+                      {services.length > SVC_PAGE_SIZE && (
+                        <div className="d-flex justify-content-end mt-3">
+                            <Pagination className="pagination-separated mb-0">
+                                <PaginationItem disabled={svcPage === 1}>
+                                    <PaginationLink first onClick={() => setSvcPage(1)} />
+                                </PaginationItem>
+                                <PaginationItem disabled={svcPage === 1}>
+                                    <PaginationLink previous onClick={() => setSvcPage(p => Math.max(1, p - 1))} />
+                                </PaginationItem>
+                                {renderSvcPageNumbers()}
+                                <PaginationItem disabled={svcPage === totalSvcPages}>
+                                    <PaginationLink next onClick={() => setSvcPage(p => Math.min(totalSvcPages, p + 1))} />
+                                </PaginationItem>
+                                <PaginationItem disabled={svcPage === totalSvcPages}>
+                                    <PaginationLink last onClick={() => setSvcPage(totalSvcPages)} />
+                                </PaginationItem>
+                            </Pagination>
+                        </div>
+                      )}
 
                       <ServiceModal
                         isOpen={svModalOpen}
                         onClose={() => setSvModalOpen(false)}
                         onSaved={refreshAllServices}
                         categories={categories}
-                        onCategoryCreated={(c) => setCategories((prev) => [...prev, c])}
+                        onCategoryCreated={(c) => {
+                            setCategories((prev) => [...prev, c].sort((a,b) => a.name.localeCompare(b.name)));
+                        }}
                         tenantId={tenantId}
                         edit={svEdit}
                       />
