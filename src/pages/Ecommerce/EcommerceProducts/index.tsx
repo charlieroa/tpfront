@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useMemo } from "react";
-
+// src/pages/Apps/Ecommerce/Products/BeautyProductsTabsDummy.tsx
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Container,
   UncontrolledDropdown,
@@ -14,820 +14,348 @@ import {
   Card,
   CardHeader,
   Col,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  Button,
+  Form,
+  Label,
+  Input,
 } from "reactstrap";
 import classnames from "classnames";
-
-// RangeSlider
 import Nouislider from "nouislider-react";
 import "nouislider/distribute/nouislider.css";
-import DeleteModal from "../../../Components/Common/DeleteModal";
 
 import BreadCrumb from "../../../Components/Common/BreadCrumb";
 import TableContainer from "../../../Components/Common/TableContainer";
-import { Rating, Published, Price } from "./EcommerceProductCol";
-//Import data
-import { productsData } from "../../../common/data";
 
-//Import actions
-import { getProducts as onGetProducts, deleteProducts } from "../../../slices/thunks";
-import { isEmpty } from "lodash";
-import Select from "react-select";
+// Celdas simples
+const PriceCell = ({ cell }: any) => {
+  const val = cell.getValue();
+  return <span>{typeof val === "string" ? val : `$${val}`}</span>;
+};
+const RatingCell = () => <span></span>; // rating vacío
+const PublishedCell = ({ cell }: any) => <span className="text-muted">{cell.getValue()}</span>;
 
-//redux
-import { useSelector, useDispatch } from "react-redux";
-import { Link } from "react-router-dom";
-import { toast, ToastContainer } from "react-toastify";
-import { createSelector } from "reselect";
-
-const SingleOptions = [
-  { value: 'Watches', label: 'Watches' },
-  { value: 'Headset', label: 'Headset' },
-  { value: 'Sweatshirt', label: 'Sweatshirt' },
-  { value: '20% off', label: '20% off' },
-  { value: '4 star', label: '4 star' },
+// Datos base (dummy)
+const INITIAL_PRODUCTS = [
+  {
+    id: "B-1001",
+    name: "Keratina Pro Liss 500ml",
+    category: "Beauty",
+    stock: 10,
+    price: "$79.900",
+    orders: 18,
+    rating: "",
+    publishedDate: "2025-09-01",
+    image:
+      "https://images.unsplash.com/photo-1580618672591-eb180b1a973f?q=80&w=800&auto=format&fit=crop",
+    status: "published",
+  },
+  {
+    id: "B-1002",
+    name: "Serum Capilar Argan 100ml",
+    category: "Beauty",
+    stock: 15,
+    price: "$39.900",
+    orders: 27,
+    rating: "",
+    publishedDate: "2025-09-01",
+    image:
+      "https://images.unsplash.com/photo-1601004890684-d8cbf643f5f2?q=80&w=800&auto=format&fit=crop",
+    status: "published",
+  },
 ];
 
-const EcommerceProducts = (props: any) => {
-  const dispatch: any = useDispatch();
+type TabKey = "all" | "reventa" | "personal";
 
-  const selectecomproductData = createSelector(
-    (state: any) => state.Ecommerce,
-    (products) => products.products
-  );
-  // Inside your component
-  const products = useSelector(selectecomproductData);
+const BeautyProductsTabsDummy = () => {
+  // Estado maestro
+  const [allProducts, setAllProducts] = useState<any[]>(INITIAL_PRODUCTS);
 
-  const [productList, setProductList] = useState<any>([]);
-  const [activeTab, setActiveTab] = useState<any>("1");
-  const [selectedMulti, setselectedMulti] = useState<any>(null);
-  const [product, setProduct] = useState<any>(null);
-
-  function handleMulti(selectedMulti: any) {
-    setselectedMulti(selectedMulti);
-  }
-
-  useEffect(() => {
-    if (products && !products.length) {
-      dispatch(onGetProducts());
-    }
-  }, [dispatch, products]);
-
-  useEffect(() => {
-    setProductList(products);
-  }, [products]);
-
-  useEffect(() => {
-    if (!isEmpty(products)) setProductList(products);
-  }, [products]);
-
-  const toggleTab = (tab: any, type: any) => {
-    if (activeTab !== tab) {
-      setActiveTab(tab);
-      let filteredProducts = products;
-      if (type !== "all") {
-        filteredProducts = products.filter((product: any) => product.status === type);
-      }
-      setProductList(filteredProducts);
-    }
-  };
+  // Estado de UI
+  const [activeTab, setActiveTab] = useState<TabKey>("all");
+  const [productList, setProductList] = useState<any[]>(INITIAL_PRODUCTS);
 
   const [cate, setCate] = useState("all");
+  const [mincost, setMincost] = useState(0);
+  const [maxcost, setMaxcost] = useState(100);
 
-  const categories = (category: any) => {
-    let filteredProducts = products;
-    if (category !== "all") {
-      filteredProducts = products.filter((product: any) => product.category === category);
-    }
-    setProductList(filteredProducts);
-    setCate(category);
-  };
+  // Modal Agregar producto
+  const [addOpen, setAddOpen] = useState(false);
+  const [newProd, setNewProd] = useState({
+    name: "",
+    price: "",
+    stock: "",
+    category: "Beauty",
+    publishedDate: "2025-09-01",
+  });
+  const [newImageFile, setNewImageFile] = useState<File | null>(null);
+  const [newImagePreview, setNewImagePreview] = useState<string | null>(null);
 
   useEffect(() => {
-    const sliderq = document.getElementById("product-price-range");
-    sliderq?.setAttribute("data-slider-color", "success");
+    document.getElementById("product-price-range")?.setAttribute("data-slider-color", "success");
   }, []);
 
-  const [mincost, setMincost] = useState(0);
-  const [maxcost, setMaxcost] = useState(500);
+  // Helpers de pestañas
+  const computeBaseForTab = (tab: TabKey, source: any[] = allProducts) => {
+    if (tab === "reventa") return source.slice(0, 1);
+    if (tab === "personal") return source.slice(1, 2);
+    return source; // all
+  };
+  const applyTabFilter = (tab: TabKey, source: any[] = allProducts) => {
+    setProductList(computeBaseForTab(tab, source));
+  };
+  const toggleTab = (tab: TabKey) => {
+    if (activeTab !== tab) {
+      setActiveTab(tab);
+      setCate("all");
+      setMincost(0);
+      setMaxcost(100);
+      applyTabFilter(tab);
+    }
+  };
 
-  useEffect(() => {
-    onUpDate([mincost, maxcost]);
-  }, [mincost, maxcost]);
-
+  // Filtros laterales (dummy)
+  const categories = (category: string) => {
+    setCate(category);
+    const base = computeBaseForTab(activeTab);
+    setProductList(category === "all" ? base : base.filter((p) => p.category === category));
+  };
   const onUpDate = (value: any) => {
-    setProductList(
-      productsData.filter(
-        (product) => product.price >= value[0] && product.price <= value[1]
-      )
-    );
     setMincost(value[0]);
     setMaxcost(value[1]);
+    const base = computeBaseForTab(activeTab);
+    const byCategory = cate === "all" ? base : base.filter((p) => p.category === cate);
+    setProductList(byCategory); // solo visual; no filtramos por precio porque son strings
+  };
+  const onChangeRating = () => {
+    const base = computeBaseForTab(activeTab);
+    const byCategory = cate === "all" ? base : base.filter((p) => p.category === cate);
+    setProductList(byCategory); // rating vacío; no filtra
+  };
+  const onUncheckMark = () => {
+    const base = computeBaseForTab(activeTab);
+    const byCategory = cate === "all" ? base : base.filter((p) => p.category === cate);
+    setProductList(byCategory);
   };
 
-
-  const [ratingvalues, setRatingvalues] = useState([]);
-  /*
-  on change rating checkbox method
-  */
-  const onChangeRating = (value: any) => {
-    setProductList(productsData.filter(product => product.rating >= value));
-
-    // var modifiedRating = [...ratingvalues];
-    // modifiedRating.push(value);
-    // setRatingvalues(modifiedRating);
+  // Modal: carga de foto y submit
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
+    setNewImageFile(file);
+    setNewImagePreview(file ? URL.createObjectURL(file) : null);
   };
-
-  const onUncheckMark = (value: any) => {
-    var modifiedRating = [...ratingvalues];
-    const modifiedData = (modifiedRating || []).filter(x => x !== value);
-    /*
-    find min values
-    */
-    var filteredProducts = productsData;
-    if (modifiedData && modifiedData.length && value !== 1) {
-      var minValue = Math.min(...modifiedData);
-      if (minValue && minValue !== Infinity) {
-        filteredProducts = productsData.filter(
-          product => product.rating >= minValue
-        );
-        setRatingvalues(modifiedData);
-      }
-    } else {
-      filteredProducts = productsData;
-    }
-    setProductList(filteredProducts);
-  };
-
-  //delete order
-  const [deleteModal, setDeleteModal] = useState<boolean>(false);
-  const [deleteModalMulti, setDeleteModalMulti] = useState<boolean>(false);
-
-  const onClickDelete = (product: any) => {
-    setProduct(product);
-    setDeleteModal(true);
-  };
-
-  const handleDeleteProduct = () => {
-    if (product) {
-      dispatch(deleteProducts(product.id));
-      setDeleteModal(false);
-    }
-  };
-
-
-  const [dele, setDele] = useState(0);
-
-  // Displat Delete Button
-  const displayDelete = () => {
-    const ele = document.querySelectorAll(".productCheckBox:checked");
-    const del = document.getElementById("selection-element") as HTMLElement;
-    setDele(ele.length);
-    if (ele.length === 0) {
-      del.style.display = 'none';
-    } else {
-      del.style.display = 'block';
-    }
-  };
-
-  // Delete Multiple
-  const deleteMultiple = () => {
-    const ele = document.querySelectorAll(".productCheckBox:checked");
-    const del = document.getElementById("selection-element") as HTMLElement;
-    ele.forEach((element: any) => {
-      dispatch(deleteProducts(element.value));
-      setTimeout(() => { toast.clearWaitingQueue(); }, 3000);
-      del.style.display = 'none';
+  const resetAddForm = () => {
+    setNewProd({
+      name: "",
+      price: "",
+      stock: "",
+      category: "Beauty",
+      publishedDate: "2025-09-01",
     });
+    if (newImagePreview) URL.revokeObjectURL(newImagePreview);
+    setNewImageFile(null);
+    setNewImagePreview(null);
+  };
+  const handleAddProduct = (e: React.FormEvent) => {
+    e.preventDefault();
+    const created = {
+      id: `B-${Math.floor(Math.random() * 9000) + 1000}`,
+      name: newProd.name || "Nuevo producto",
+      category: newProd.category || "Beauty",
+      stock: newProd.stock ? Number(newProd.stock) : 0,
+      price: newProd.price || "$0",
+      orders: 0,
+      rating: "",
+      publishedDate: newProd.publishedDate || "2025-09-01",
+      image:
+        newImagePreview ||
+        "https://images.unsplash.com/photo-1580618672591-eb180b1a973f?q=80&w=800&auto=format&fit=crop",
+      status: "published",
+    };
+    const updatedAll = [...allProducts, created];
+    setAllProducts(updatedAll);
+    const base = computeBaseForTab(activeTab, updatedAll);
+    const byCategory = cate === "all" ? base : base.filter((p) => p.category === cate);
+    setProductList(byCategory);
+    setAddOpen(false);
+    resetAddForm();
   };
 
-  const columns = useMemo(() => [
-    {
-      header: "#",
-      accessorKey: "id",
-      enableColumnFilter: false,
-      enableSorting: false,
-      cell: (cell: any) => {
-        return <input type="checkbox" className="productCheckBox form-check-input" value={cell.getValue()} onClick={() => displayDelete()} />;
-      },
-    },
-    {
-      header: "Product",
-      accessorKey: "name",
-      enableColumnFilter: false,
-      cell: (cell: any) => (
-        <>
+  // Columnas
+  const columns = useMemo(
+    () => [
+      {
+        header: "Product",
+        accessorKey: "name",
+        enableColumnFilter: false,
+        cell: (cell: any) => (
           <div className="d-flex align-items-center">
             <div className="flex-shrink-0 me-3">
               <div className="avatar-sm bg-light rounded p-1">
-                <img
-                  src={cell.row.original.image}
-                  alt=""
-                  className="img-fluid d-block"
-                />
+                <img src={cell.row.original.image} alt="" className="img-fluid d-block" />
               </div>
             </div>
             <div className="flex-grow-1">
               <h5 className="fs-14 mb-1">
-                <Link
-                  to="/apps-ecommerce-product-details"
-                  className="text-body"
-                >
-                  {" "}
+                <a href="#" className="text-body" onClick={(e) => e.preventDefault()}>
                   {cell.getValue()}
-                </Link>
+                </a>
               </h5>
               <p className="text-muted mb-0">
-                Category :{" "}
-                <span className="fw-medium">
-                  {" "}
-                  {cell.row.original.category}
-                </span>
+                Category : <span className="fw-medium">{cell.row.original.category}</span>
               </p>
             </div>
           </div>
-        </>
-      ),
-    },
-    {
-      header: "Stock",
-      accessorKey: "stock",
-      enableColumnFilter: false,
-    },
-    {
-      header: "Price",
-      accessorKey: "price",
-      enableColumnFilter: false,
-      cell: (cell: any) => {
-        return <Price {...cell} />;
+        ),
       },
-    },
-    {
-      header: "Orders",
-      accessorKey: "orders",
-      enableColumnFilter: false,
-    },
-    {
-      header: "Rating",
-      accessorKey: "rating",
-      enableColumnFilter: false,
-      cell: (cell: any) => {
-        return <Rating {...cell} />;
-      },
-    },
-    {
-      header: "Published",
-      accessorKey: "publishedDate",
-      enableColumnFilter: false,
-      cell: (cell: any) => {
-        return <Published {...cell} />;
-      },
-    },
-    {
-      header: "Action",
-      cell: (cell: any) => {
-        return (
+      { header: "Stock", accessorKey: "stock", enableColumnFilter: false },
+      { header: "Price", accessorKey: "price", enableColumnFilter: false, cell: (c: any) => <PriceCell {...c} /> },
+      { header: "Orders", accessorKey: "orders", enableColumnFilter: false },
+      { header: "Rating", accessorKey: "rating", enableColumnFilter: false, cell: () => <RatingCell /> },
+      { header: "Published", accessorKey: "publishedDate", enableColumnFilter: false, cell: (c: any) => <PublishedCell {...c} /> },
+      {
+        header: "Action",
+        cell: () => (
           <UncontrolledDropdown>
-            <DropdownToggle
-              href="#"
-              className="btn btn-soft-secondary btn-sm"
-              tag="button"
-            >
+            <DropdownToggle href="#" className="btn btn-soft-secondary btn-sm" tag="button">
               <i className="ri-more-fill" />
             </DropdownToggle>
             <DropdownMenu className="dropdown-menu-end">
-              <DropdownItem href="apps-ecommerce-product-details">
-                <i className="ri-eye-fill align-bottom me-2 text-muted"></i>{" "}
-                View
+              <DropdownItem href="#" onClick={(e) => e.preventDefault()}>
+                <i className="ri-eye-fill align-bottom me-2 text-muted"></i> View
               </DropdownItem>
-
-              <DropdownItem href="apps-ecommerce-add-product">
-                <i className="ri-pencil-fill align-bottom me-2 text-muted"></i>{" "}
-                Edit
+              <DropdownItem href="#" onClick={(e) => e.preventDefault()}>
+                <i className="ri-pencil-fill align-bottom me-2 text-muted"></i> Edit
               </DropdownItem>
-
               <DropdownItem divider />
-              <DropdownItem
-                href="#"
-                onClick={() => {
-                  const productData = cell.row.original;
-                  onClickDelete(productData);
-                }}
-              >
-                <i className="ri-delete-bin-fill align-bottom me-2 text-muted"></i>{" "}
-                Delete
+              <DropdownItem href="#" onClick={(e) => e.preventDefault()}>
+                <i className="ri-delete-bin-fill align-bottom me-2 text-muted"></i> Delete
               </DropdownItem>
             </DropdownMenu>
           </UncontrolledDropdown>
-        );
+        ),
       },
-    },
-  ],
+    ],
     []
   );
-  document.title = "Products | Velzon - React Admin & Dashboard Template";
+
+  document.title = "Products (All / Reventa / Personal) | Velzon - React Admin & Dashboard";
 
   return (
     <div className="page-content">
-      <ToastContainer closeButton={false} limit={1} />
-
-      <DeleteModal
-        show={deleteModal}
-        onDeleteClick={handleDeleteProduct}
-        onCloseClick={() => setDeleteModal(false)}
-      />
-      <DeleteModal
-        show={deleteModalMulti}
-        onDeleteClick={() => {
-          deleteMultiple();
-          setDeleteModalMulti(false);
-        }}
-        onCloseClick={() => setDeleteModalMulti(false)}
-      />
       <Container fluid>
         <BreadCrumb title="Products" pageTitle="Ecommerce" />
 
         <Row>
+          {/* Sidebar filtros */}
           <Col xl={3} lg={4}>
             <Card>
-              <CardHeader >
+              <CardHeader>
                 <div className="d-flex mb-3">
                   <div className="flex-grow-1">
                     <h5 className="fs-16">Filters</h5>
                   </div>
                   <div className="flex-shrink-0">
-                    <Link to="#" className="text-decoration-underline">
+                    <a
+                      href="#"
+                      className="text-decoration-underline"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setMincost(0);
+                        setMaxcost(100);
+                        setCate("all");
+                        applyTabFilter(activeTab);
+                      }}
+                    >
                       Clear All
-                    </Link>
+                    </a>
                   </div>
-                </div>
-
-                <div className="filter-choices-input">
-                  <Select
-                    value={selectedMulti}
-                    isMulti={true}
-                    onChange={(selectedMulti: any) => {
-                      handleMulti(selectedMulti);
-                    }}
-                    options={SingleOptions}
-                  />
                 </div>
               </CardHeader>
 
               <div className="accordion accordion-flush">
                 <div className="card-body border-bottom">
-                  <div>
-                    <p className="text-muted text-uppercase fs-12 fw-medium mb-2">
-                      Products
-                    </p>
-                    <ul className="list-unstyled mb-0 filter-list">
-                      <li>
-                        <Link to="#" className={cate === "Kitchen Storage & Containers" ? "active d-flex py-1 align-items-center" : "d-flex py-1 align-items-center"} onClick={() => categories("Kitchen Storage & Containers")}>
-                          <div className="flex-grow-1">
-                            <h5 className="fs-13 mb-0 listname">Grocery</h5>
-                          </div>
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="#" className={cate === "Clothes" ? "active d-flex py-1 align-items-center" : "d-flex py-1 align-items-center"} onClick={() => categories("Clothes")}>
-                          <div className="flex-grow-1">
-                            <h5 className="fs-13 mb-0 listname">Fashion</h5>
-                          </div>
-                          <div className="flex-shrink-0 ms-2">
-                            <span className="badge bg-light text-muted">5</span>
-                          </div>
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="#" className={cate === "Watches" ? "active d-flex py-1 align-items-center" : "d-flex py-1 align-items-center"} onClick={() => categories("Watches")}>
-                          <div className="flex-grow-1">
-                            <h5 className="fs-13 mb-0 listname">Watches</h5>
-                          </div>
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="#" className={cate === "electronics" ? "active d-flex py-1 align-items-center" : "d-flex py-1 align-items-center"} onClick={() => categories("electronics")}>
-                          <div className="flex-grow-1">
-                            <h5 className="fs-13 mb-0 listname">Electronics</h5>
-                          </div>
-                          <div className="flex-shrink-0 ms-2">
-                            <span className="badge bg-light text-muted">5</span>
-                          </div>
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="#" className={cate === "Furniture" ? "active d-flex py-1 align-items-center" : "d-flex py-1 align-items-center"} onClick={() => categories("Furniture")}>
-                          <div className="flex-grow-1">
-                            <h5 className="fs-13 mb-0 listname">Furniture</h5>
-                          </div>
-                          <div className="flex-shrink-0 ms-2">
-                            <span className="badge bg-light text-muted">6</span>
-                          </div>
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="#" className={cate === "Bike Accessories" ? "active d-flex py-1 align-items-center" : "d-flex py-1 align-items-center"} onClick={() => categories("Bike Accessories")}>
-                          <div className="flex-grow-1">
-                            <h5 className="fs-13 mb-0 listname">Automotive Accessories</h5>
-                          </div>
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="#" className={cate === "appliances" ? "active d-flex py-1 align-items-center" : "d-flex py-1 align-items-center"} onClick={() => categories("appliances")}>
-                          <div className="flex-grow-1">
-                            <h5 className="fs-13 mb-0 listname">Appliances</h5>
-                          </div>
-                          <div className="flex-shrink-0 ms-2">
-                            <span className="badge bg-light text-muted">7</span>
-                          </div>
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="#" className={cate === "Bags, Wallets and Luggage" ? "active d-flex py-1 align-items-center" : "d-flex py-1 align-items-center"} onClick={() => categories("Bags, Wallets and Luggage")} >
-                          <div className="flex-grow-1">
-                            <h5 className="fs-13 mb-0 listname">Kids</h5>
-                          </div>
-                        </Link>
-                      </li>
-                    </ul>
-                  </div>
+                  <p className="text-muted text-uppercase fs-12 fw-medium mb-2">Products</p>
+                  <ul className="list-unstyled mb-0 filter-list">
+                    <li>
+                      <a
+                        href="#"
+                        className={cate === "Beauty" ? "active d-flex py-1 align-items-center" : "d-flex py-1 align-items-center"}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          categories("Beauty");
+                        }}
+                      >
+                        <div className="flex-grow-1">
+                          <h5 className="fs-13 mb-0 listname">Beauty</h5>
+                        </div>
+                      </a>
+                    </li>
+                    <li>
+                      <a
+                        href="#"
+                        className={cate === "all" ? "active d-flex py-1 align-items-center" : "d-flex py-1 align-items-center"}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          categories("all");
+                        }}
+                      >
+                        <div className="flex-grow-1">
+                          <h5 className="fs-13 mb-0 listname">All</h5>
+                        </div>
+                      </a>
+                    </li>
+                  </ul>
                 </div>
 
                 <div className="card-body border-bottom">
-                  <p className="text-muted text-uppercase fs-12 fw-medium mb-4">
-                    Price
-                  </p>
-                  <Nouislider range={{ min: 0, max: 100 }} start={[20, 80]} connect />
-
-                  {/* <Nouislider
-                    range={{ min: 0, max: 2000 }}
+                  <p className="text-muted text-uppercase fs-12 fw-medium mb-4">Price</p>
+                  <Nouislider
+                    range={{ min: 0, max: 100 }}
                     start={[mincost, maxcost]}
                     connect
                     onSlide={onUpDate}
-                    data-slider-color="primary"
                     id="product-price-range"
-                  /> */}
+                  />
                   <div className="formCost d-flex gap-2 align-items-center mt-3">
-                    <input className="form-control form-control-sm" type="text" value={`$ ${mincost}`} onChange={(e: any) => setMincost(e.target.value)} id="minCost" readOnly />
+                    <input className="form-control form-control-sm" type="text" value={`$ ${mincost}`} readOnly />
                     <span className="fw-semibold text-muted">to</span>
-                    <input className="form-control form-control-sm" type="text" value={`$ ${maxcost}`} onChange={(e: any) => setMaxcost(e.target.value)} id="maxCost" readOnly />
+                    <input className="form-control form-control-sm" type="text" value={`$ ${maxcost}`} readOnly />
                   </div>
                 </div>
 
                 <div className="accordion-item">
                   <h2 className="accordion-header">
-                    <button
-                      className="accordion-button bg-transparent shadow-none"
-                      type="button"
-                      id="flush-headingBrands"
-                    >
-                      <span className="text-muted text-uppercase fs-12 fw-medium">
-                        Brands
-                      </span>{" "}
-                      <span className="badge bg-success rounded-pill align-middle ms-1">
-                        2
-                      </span>
+                    <button className="accordion-button bg-transparent shadow-none" type="button" id="flush-headingRating">
+                      <span className="text-muted text-uppercase fs-12 fw-medium">Rating</span>{" "}
+                      <span className="badge bg-success rounded-pill align-middle ms-1">{allProducts.length}</span>
                     </button>
                   </h2>
-                  <UncontrolledCollapse
-                    toggler="#flush-headingBrands"
-                    defaultOpen
-                  >
-                    <div
-                      id="flush-collapseBrands"
-                      className="accordion-collapse collapse show"
-                      aria-labelledby="flush-headingBrands"
-                    >
-                      <div className="accordion-body text-body pt-0">
-                        <div className="search-box search-box-sm">
-                          <input
-                            type="text"
-                            className="form-control bg-light border-0"
-                            placeholder="Search Brands..."
-                          />
-                          <i className="ri-search-line search-icon"></i>
-                        </div>
-                        <div className="d-flex flex-column gap-2 mt-3">
-                          <div className="form-check">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              id="productBrandRadio5"
-                              defaultChecked
-                            />
-                            <label
-                              className="form-check-label"
-                              htmlFor="productBrandRadio5"
-                            >
-                              Boat
-                            </label>
-                          </div>
-                          <div className="form-check">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              id="productBrandRadio4"
-                            />
-                            <label
-                              className="form-check-label"
-                              htmlFor="productBrandRadio4"
-                            >
-                              OnePlus
-                            </label>
-                          </div>
-                          <div className="form-check">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              id="productBrandRadio3"
-                            />
-                            <label
-                              className="form-check-label"
-                              htmlFor="productBrandRadio3"
-                            >
-                              Realme
-                            </label>
-                          </div>
-                          <div className="form-check">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              id="productBrandRadio2"
-                            />
-                            <label
-                              className="form-check-label"
-                              htmlFor="productBrandRadio2"
-                            >
-                              Sony
-                            </label>
-                          </div>
-                          <div className="form-check">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              id="productBrandRadio1"
-                              defaultChecked
-                            />
-                            <label
-                              className="form-check-label"
-                              htmlFor="productBrandRadio1"
-                            >
-                              JBL
-                            </label>
-                          </div>
-
-                          <div>
-                            <button
-                              type="button"
-                              className="btn btn-link text-decoration-none text-uppercase fw-medium p-0"
-                            >
-                              1,235 More
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </UncontrolledCollapse>
-                </div>
-
-                <div className="accordion-item">
-                  <h2 className="accordion-header">
-                    <button
-                      className="accordion-button bg-transparent shadow-none collapsed"
-                      type="button"
-                      id="flush-headingDiscount"
-                    >
-                      <span className="text-muted text-uppercase fs-12 fw-medium">
-                        Discount
-                      </span>{" "}
-                      <span className="badge bg-success rounded-pill align-middle ms-1">
-                        1
-                      </span>
-                    </button>
-                  </h2>
-                  <UncontrolledCollapse toggler="#flush-headingDiscount">
-                    <div
-                      id="flush-collapseDiscount"
-                      className="accordion-collapse collapse show"
-                    >
-                      <div className="accordion-body text-body pt-1">
-                        <div className="d-flex flex-column gap-2">
-                          <div className="form-check">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              id="productdiscountRadio6"
-                            />
-                            <label
-                              className="form-check-label"
-                              htmlFor="productdiscountRadio6"
-                            >
-                              50% or more
-                            </label>
-                          </div>
-                          <div className="form-check">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              id="productdiscountRadio5"
-                            />
-                            <label
-                              className="form-check-label"
-                              htmlFor="productdiscountRadio5"
-                            >
-                              40% or more
-                            </label>
-                          </div>
-                          <div className="form-check">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              id="productdiscountRadio4"
-                            />
-                            <label
-                              className="form-check-label"
-                              htmlFor="productdiscountRadio4"
-                            >
-                              30% or more
-                            </label>
-                          </div>
-                          <div className="form-check">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              id="productdiscountRadio3"
-                              defaultChecked
-                            />
-                            <label
-                              className="form-check-label"
-                              htmlFor="productdiscountRadio3"
-                            >
-                              20% or more
-                            </label>
-                          </div>
-                          <div className="form-check">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              id="productdiscountRadio2"
-                            />
-                            <label
-                              className="form-check-label"
-                              htmlFor="productdiscountRadio2"
-                            >
-                              10% or more
-                            </label>
-                          </div>
-                          <div className="form-check">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              id="productdiscountRadio1"
-                            />
-                            <label
-                              className="form-check-label"
-                              htmlFor="productdiscountRadio1"
-                            >
-                              Less than 10%
-                            </label>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </UncontrolledCollapse>
-                </div>
-
-                <div className="accordion-item">
-                  <h2 className="accordion-header">
-                    <button
-                      className="accordion-button bg-transparent shadow-none collapsed"
-                      type="button"
-                      id="flush-headingRating"
-                    >
-                      <span className="text-muted text-uppercase fs-12 fw-medium">
-                        Rating
-                      </span>{" "}
-                      <span className="badge bg-success rounded-pill align-middle ms-1">
-                        1
-                      </span>
-                    </button>
-                  </h2>
-
-                  <UncontrolledCollapse toggler="#flush-headingRating">
-                    <div
-                      id="flush-collapseRating"
-                      className="accordion-collapse collapse show"
-                      aria-labelledby="flush-headingRating"
-                    >
+                  <UncontrolledCollapse toggler="#flush-headingRating" defaultOpen>
+                    <div className="accordion-collapse collapse show">
                       <div className="accordion-body text-body">
                         <div className="d-flex flex-column gap-2">
-                          <div className="form-check">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              id="productratingRadio4"
-                              onChange={e => {
-                                if (e.target.checked) {
-                                  onChangeRating(4);
-                                } else {
-                                  onUncheckMark(4);
-                                }
-                              }}
-                            />
-                            <label
-                              className="form-check-label"
-                              htmlFor="productratingRadio4"
-                            >
-                              <span className="text-muted">
-                                <i className="mdi mdi-star text-warning"></i>
-                                <i className="mdi mdi-star text-warning"></i>
-                                <i className="mdi mdi-star text-warning"></i>
-                                <i className="mdi mdi-star text-warning"></i>
-                                <i className="mdi mdi-star"></i>
-                              </span>{" "}
-                              4 & Above
-                            </label>
-                          </div>
-                          <div className="form-check">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              id="productratingRadio3"
-                              onChange={e => {
-                                if (e.target.checked) {
-                                  onChangeRating(3);
-                                } else {
-                                  onUncheckMark(3);
-                                }
-                              }}
-                            />
-                            <label
-                              className="form-check-label"
-                              htmlFor="productratingRadio3"
-                            >
-                              <span className="text-muted">
-                                <i className="mdi mdi-star text-warning"></i>
-                                <i className="mdi mdi-star text-warning"></i>
-                                <i className="mdi mdi-star text-warning"></i>
-                                <i className="mdi mdi-star"></i>
-                                <i className="mdi mdi-star"></i>
-                              </span>{" "}
-                              3 & Above
-                            </label>
-                          </div>
-                          <div className="form-check">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              id="productratingRadio2"
-                            />
-                            <label
-                              className="form-check-label"
-                              htmlFor="productratingRadio2"
-                              onChange={(e: any) => {
-                                if (e.target.checked) {
-                                  onChangeRating(2);
-                                } else {
-                                  onUncheckMark(2);
-                                }
-                              }}
-                            >
-                              <span className="text-muted">
-                                <i className="mdi mdi-star text-warning"></i>
-                                <i className="mdi mdi-star text-warning"></i>
-                                <i className="mdi mdi-star"></i>
-                                <i className="mdi mdi-star"></i>
-                                <i className="mdi mdi-star"></i>
-                              </span>{" "}
-                              2 & Above
-                            </label>
-                          </div>
-                          <div className="form-check">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              id="productratingRadio1"
-                              onChange={e => {
-                                if (e.target.checked) {
-                                  onChangeRating(1);
-                                } else {
-                                  onUncheckMark(1);
-                                }
-                              }}
-                            />
-                            <label
-                              className="form-check-label"
-                              htmlFor="productratingRadio1"
-                            >
-                              <span className="text-muted">
-                                <i className="mdi mdi-star text-warning"></i>
-                                <i className="mdi mdi-star"></i>
-                                <i className="mdi mdi-star"></i>
-                                <i className="mdi mdi-star"></i>
-                                <i className="mdi mdi-star"></i>
-                              </span>{" "}
-                              1
-                            </label>
-                          </div>
+                          {[5, 4, 3, 2, 1].map((r) => (
+                            <div className="form-check" key={r}>
+                              <input
+                                className="form-check-input"
+                                type="checkbox"
+                                id={`productratingRadio${r}`}
+                                onChange={(e) => (e.target.checked ? onChangeRating() : onUncheckMark())}
+                              />
+                              <label className="form-check-label" htmlFor={`productratingRadio${r}`}>
+                                <span className="text-muted">
+                                  {Array.from({ length: 5 }).map((_, i) => (
+                                    <i key={i} className={`mdi mdi-star${i < r ? " text-warning" : ""}`} />
+                                  ))}
+                                </span>{" "}
+                                {r} & Above
+                              </label>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     </div>
@@ -837,121 +365,174 @@ const EcommerceProducts = (props: any) => {
             </Card>
           </Col>
 
+          {/* Contenido principal */}
           <Col xl={9} lg={8}>
-            <div>
-              <Card>
-                <div className="card-header border-0">
-                  <Row className=" align-items-center">
-                    <Col>
-                      <Nav
-                        className="nav-tabs-custom card-header-tabs border-bottom-0"
-                        role="tablist"
-                      >
-                        <NavItem>
-                          <NavLink
-                            className={classnames(
-                              { active: activeTab === "1" },
-                              "fw-semibold"
-                            )}
-                            onClick={() => {
-                              toggleTab("1", "all");
-                            }}
-                            href="#"
-                          >
-                            All{" "}
-                            <span className="badge bg-danger-subtle text-danger align-middle rounded-pill ms-1">
-                              12
-                            </span>
-                          </NavLink>
-                        </NavItem>
-                        <NavItem>
-                          <NavLink
-                            className={classnames(
-                              { active: activeTab === "2" },
-                              "fw-semibold"
-                            )}
-                            onClick={() => {
-                              toggleTab("2", "published");
-                            }}
-                            href="#"
-                          >
-                            Published{" "}
-                            <span className="badge bg-danger-subtle text-danger align-middle rounded-pill ms-1">
-                              5
-                            </span>
-                          </NavLink>
-                        </NavItem>
-                        <NavItem>
-                          <NavLink
-                            className={classnames(
-                              { active: activeTab === "3" },
-                              "fw-semibold"
-                            )}
-                            onClick={() => {
-                              toggleTab("3", "draft");
-                            }}
-                            href="#"
-                          >
-                            Draft
-                          </NavLink>
-                        </NavItem>
-                      </Nav>
-                    </Col>
-                    <div className="col-auto">
-                      <div id="selection-element">
-                        <div className="my-n1 d-flex align-items-center text-muted">
-                          Select{" "}
-                          <div
-                            id="select-content"
-                            className="text-body fw-semibold px-1"
-                          >{dele}</div>{" "}
-                          Result{" "}
-                          <button
-                            type="button"
-                            className="btn btn-link link-danger p-0 ms-3"
-                            onClick={() => setDeleteModalMulti(true)}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      </div>
+            <Card>
+              <div className="card-header border-0">
+                <Row className="align-items-center g-2">
+                  <Col>
+                    <Nav className="nav-tabs-custom card-header-tabs border-bottom-0" role="tablist">
+                      <NavItem>
+                        <NavLink
+                          className={classnames({ active: activeTab === "all" }, "fw-semibold")}
+                          onClick={() => toggleTab("all")}
+                          href="#"
+                        >
+                          All{" "}
+                          <span className="badge bg-danger-subtle text-danger align-middle rounded-pill ms-1">
+                            {allProducts.length}
+                          </span>
+                        </NavLink>
+                      </NavItem>
+                      <NavItem>
+                        <NavLink
+                          className={classnames({ active: activeTab === "reventa" }, "fw-semibold")}
+                          onClick={() => toggleTab("reventa")}
+                          href="#"
+                        >
+                          Reventa{" "}
+                          <span className="badge bg-danger-subtle text-danger align-middle rounded-pill ms-1">1</span>
+                        </NavLink>
+                      </NavItem>
+                      <NavItem>
+                        <NavLink
+                          className={classnames({ active: activeTab === "personal" }, "fw-semibold")}
+                          onClick={() => toggleTab("personal")}
+                          href="#"
+                        >
+                          Personal{" "}
+                          <span className="badge bg-danger-subtle text-danger align-middle rounded-pill ms-1">1</span>
+                        </NavLink>
+                      </NavItem>
+                    </Nav>
+                  </Col>
+
+                  {/* ÚNICO botón: Agregar producto (abre modal) */}
+                  <Col className="text-end">
+                    <Button color="primary" onClick={() => setAddOpen(true)}>
+                      <i className="ri-add-line align-middle me-1"></i>
+                      Agregar producto
+                    </Button>
+                  </Col>
+                </Row>
+              </div>
+
+              <div className="card-body pt-0">
+                {productList && productList.length > 0 ? (
+                  <TableContainer
+                    columns={columns}
+                    data={productList}
+                    isGlobalFilter={true}
+                    customPageSize={10}
+                    divClass="table-responsive mb-1"
+                    tableClass="mb-0 align-middle table-borderless"
+                    theadClass="table-light text-muted"
+                    isProductsFilter={true}
+                    SearchPlaceholder="Search Products..."
+                  />
+                ) : (
+                  <div className="py-4 text-center">
+                    <div>
+                      <i className="ri-search-line display-5 text-success" />
                     </div>
-                  </Row>
-                </div>
-                <div className="card-body pt-0">
-                  {productList && productList.length > 0 ? (
-                    <TableContainer
-                      columns={columns}
-                      data={(productList || [])}
-                      isGlobalFilter={true}
-                      customPageSize={10}
-                      divClass="table-responsive mb-1"
-                      tableClass="mb-0 align-middle table-borderless"
-                      theadClass="table-light text-muted"
-                      isProductsFilter={true}
-                      SearchPlaceholder='Search Products...'
-                    />
-                  ) : (
-                    <div className="py-4 text-center">
-                      <div>
-                        <i className="ri-search-line display-5 text-success"></i>
-                      </div>
-
-                      <div className="mt-4">
-                        <h5>Sorry! No Result Found</h5>
-                      </div>
+                    <div className="mt-4">
+                      <h5>Sorry! No Result Found</h5>
                     </div>
-                  )}
-                </div>
-
-
-              </Card>
-            </div>
+                  </div>
+                )}
+              </div>
+            </Card>
           </Col>
         </Row>
+
+        {/* Modal Agregar producto (con carga de foto y vista previa) */}
+        <Modal isOpen={addOpen} toggle={() => setAddOpen(!addOpen)}>
+          <ModalHeader toggle={() => setAddOpen(!addOpen)}>Agregar producto</ModalHeader>
+          <Form onSubmit={handleAddProduct}>
+            <ModalBody>
+              <Row className="g-3">
+                <Col md={12}>
+                  <Label className="form-label">Nombre</Label>
+                  <Input
+                    type="text"
+                    value={newProd.name}
+                    onChange={(e) => setNewProd((p) => ({ ...p, name: e.target.value }))}
+                    placeholder="Nombre del producto"
+                    required
+                  />
+                </Col>
+                <Col md={6}>
+                  <Label className="form-label">Precio</Label>
+                  <Input
+                    type="text"
+                    value={newProd.price}
+                    onChange={(e) => setNewProd((p) => ({ ...p, price: e.target.value }))}
+                    placeholder="$79.900"
+                  />
+                </Col>
+                <Col md={6}>
+                  <Label className="form-label">Stock</Label>
+                  <Input
+                    type="number"
+                    value={newProd.stock}
+                    onChange={(e) => setNewProd((p) => ({ ...p, stock: e.target.value }))}
+                    placeholder="10"
+                    min={0}
+                  />
+                </Col>
+                <Col md={6}>
+                  <Label className="form-label">Categoría</Label>
+                  <Input
+                    type="text"
+                    value={newProd.category}
+                    onChange={(e) => setNewProd((p) => ({ ...p, category: e.target.value }))}
+                    placeholder="Beauty"
+                  />
+                </Col>
+                <Col md={6}>
+                  <Label className="form-label">Fecha publicación</Label>
+                  <Input
+                    type="date"
+                    value={newProd.publishedDate}
+                    onChange={(e) => setNewProd((p) => ({ ...p, publishedDate: e.target.value }))}
+                  />
+                </Col>
+                <Col md={12}>
+                  <Label className="form-label">Foto</Label>
+                  <Input type="file" accept="image/*" onChange={handleFileChange} />
+                  {newImagePreview && (
+                    <div className="mt-3 d-flex align-items-center gap-3">
+                      <img
+                        src={newImagePreview}
+                        alt="preview"
+                        style={{ width: 96, height: 96, objectFit: "cover", borderRadius: 8 }}
+                      />
+                      <span className="text-muted">Vista previa</span>
+                    </div>
+                  )}
+                </Col>
+              </Row>
+            </ModalBody>
+            <ModalFooter>
+              <Button
+                type="button"
+                color="light"
+                onClick={() => {
+                  setAddOpen(false);
+                  resetAddForm();
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" color="primary">
+                Guardar
+              </Button>
+            </ModalFooter>
+          </Form>
+        </Modal>
       </Container>
     </div>
   );
 };
 
-export default EcommerceProducts;
+export default BeautyProductsTabsDummy;

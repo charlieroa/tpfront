@@ -77,9 +77,28 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
   selectedEvent,
   defaultDate,
 }) => {
+  // ================== LOG A PRUEBA DE FALLOS ==================
+  console.log(
+    "--- El componente AppointmentModal SE ESTÁ RENDERIZANDO ---",
+    { isOpen, selectedEvent }
+  );
+  // ==========================================================
+
   const dispatch: any = useDispatch();
   const { clients = [], services = [] } =
     useSelector((state: any) => state.calendar || state.Calendar || {}) || {};
+
+  // ================== DEBUGGING ==================
+  useEffect(() => {
+    console.log("La lista de CLIENTES ha cambiado:", clients);
+  }, [clients]);
+
+  useEffect(() => {
+    if (selectedEvent) {
+      console.log("El EVENTO SELECCIONADO ha cambiado:", selectedEvent);
+    }
+  }, [selectedEvent]);
+  // =============================================================
 
   // --- ESTADOS ---
   const [showNewClientForm, setShowNewClientForm] = useState<boolean>(false);
@@ -230,7 +249,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
       resetState();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, selectedEvent, defaultDate]);
+  }, [isOpen, selectedEvent, defaultDate, clients]);
 
   // --- Slots por servicio/fecha ---
   useEffect(() => {
@@ -500,36 +519,27 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                 </div>
               ) : (
                 <>
-                  {selectedEvent ? (
-                    <FormGroup className="mb-0">
-                      <Label>Cliente</Label>
-                      <Input
-                        type="text"
-                        value={`${selectedEvent.client_first_name || ""} ${
-                          selectedEvent.client_last_name || ""
-                        }`}
-                        disabled
-                      />
-                    </FormGroup>
-                  ) : (
-                    <FormGroup className="mb-0">
-                      <Label>Cliente existente*</Label>
-                      <Row className="g-2 align-items-end">
-                        <Col md={9}>
-                          <Input
-                            type="select"
-                            name="client_id"
-                            onChange={validation.handleChange}
-                            value={validation.values.client_id}
-                          >
-                            <option value="">Seleccione…</option>
-                            {clients.map((c: any) => (
-                              <option key={c.id} value={c.id}>
-                                {c.first_name} {c.last_name}
-                              </option>
-                            ))}
-                          </Input>
-                        </Col>
+                  <FormGroup className="mb-0">
+                    <Label>Cliente*</Label>
+                    <Row className="g-2 align-items-end">
+                      <Col md={selectedEvent ? 12 : 9}>
+                        <Input
+                          type="select"
+                          name="client_id"
+                          onChange={validation.handleChange}
+                          value={validation.values.client_id}
+                          disabled={!!selectedEvent} // Deshabilita el select en modo edición
+                        >
+                          <option value="">Seleccione…</option>
+                          {clients.map((c: any) => (
+                            <option key={c.id} value={c.id}>
+                              {c.first_name} {c.last_name}
+                            </option>
+                          ))}
+                        </Input>
+                      </Col>
+                      {/* El botón de "Crear nuevo" solo aparece si NO estamos editando */}
+                      {!selectedEvent && (
                         <Col md="auto">
                           <Button
                             color="secondary"
@@ -539,9 +549,9 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                             Crear nuevo cliente
                           </Button>
                         </Col>
-                      </Row>
-                    </FormGroup>
-                  )}
+                      )}
+                    </Row>
+                  </FormGroup>
                 </>
               )}
             </Col>

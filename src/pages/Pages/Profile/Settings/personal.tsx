@@ -1,4 +1,3 @@
-// src/pages/Pages/Profile/Settings/personal.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Button, Spinner, Table, Badge, Modal, ModalHeader, ModalBody, ModalFooter,
@@ -45,7 +44,8 @@ type Service = {
 
 type AssignedSvc = { id: string; name: string };
 
-type DayKey = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
+// --- CORRECCIÓN 1: DayKey en español ---
+type DayKey = "lunes" | "martes" | "miercoles" | "jueves" | "viernes" | "sabado" | "domingo";
 type DayState = { active: boolean; open: string; close: string };
 type WeekState = Record<DayKey, DayState>;
 
@@ -113,24 +113,27 @@ const toTime = (raw: string): string => {
 };
 
 const DEFAULT_DAY: DayState = { active: false, open: "09:00", close: "17:00" };
+
+// --- CORRECCIÓN 2: defaultWeek en español ---
 const defaultWeek = (): WeekState => ({
-  monday:    { ...DEFAULT_DAY },
-  tuesday:   { ...DEFAULT_DAY },
-  wednesday: { ...DEFAULT_DAY },
-  thursday:  { ...DEFAULT_DAY },
-  friday:    { ...DEFAULT_DAY },
-  saturday:  { ...DEFAULT_DAY },
-  sunday:    { ...DEFAULT_DAY },
+  lunes:     { ...DEFAULT_DAY },
+  martes:    { ...DEFAULT_DAY },
+  miercoles: { ...DEFAULT_DAY },
+  jueves:    { ...DEFAULT_DAY },
+  viernes:   { ...DEFAULT_DAY },
+  sabado:    { ...DEFAULT_DAY },
+  domingo:   { ...DEFAULT_DAY },
 });
 
+// --- CORRECCIÓN 3: DAYS_UI en español ---
 const DAYS_UI: { key: DayKey; label: string }[] = [
-  { key: "monday",    label: "Lunes" },
-  { key: "tuesday",   label: "Martes" },
-  { key: "wednesday", label: "Miércoles" },
-  { key: "thursday",  label: "Jueves" },
-  { key: "friday",    label: "Viernes" },
-  { key: "saturday",  label: "Sábado" },
-  { key: "sunday",    label: "Domingo" },
+  { key: "lunes",     label: "Lunes" },
+  { key: "martes",    label: "Martes" },
+  { key: "miercoles", label: "Miércoles" },
+  { key: "jueves",    label: "Jueves" },
+  { key: "viernes",   label: "Viernes" },
+  { key: "sabado",    label: "Sábado" },
+  { key: "domingo",   label: "Domingo" },
 ];
 
 const validateWeek = (week: WeekState): string | null => {
@@ -300,9 +303,9 @@ const StaffModal: React.FC<{
 
   // Datos básicos
   const [firstName, setFirstName] = useState(edit?.first_name || "");
-  const [lastName, setLastName]   = useState(edit?.last_name || "");
-  const [email, setEmail]         = useState(edit?.email || "");
-  const [phone, setPhone]         = useState(edit?.phone || "");
+  const [lastName, setLastName] = useState(edit?.last_name || "");
+  const [email, setEmail] = useState(edit?.email || "");
+  const [phone, setPhone] = useState(edit?.phone || "");
   const [paymentType, setPaymentType] = useState<PaymentType>((edit?.payment_type as PaymentType) || "salary");
 
   // Máscaras
@@ -338,11 +341,11 @@ const StaffModal: React.FC<{
     setWeek(prev => ({ ...prev, [day]: { ...prev[day], [field]: value } }));
 
   const applyMondayToAll = () => {
-    const monday = week.monday;
+    const monday = week.lunes; // Se usa la clave en español
     setWeek(prev => {
       const next: WeekState = { ...prev };
       (Object.keys(next) as DayKey[]).forEach(k => {
-        if (k === "monday") return;
+        if (k === "lunes") return;
         next[k] = { ...next[k], active: monday.active, open: monday.open, close: monday.close };
       });
       return next;
@@ -381,13 +384,11 @@ const StaffModal: React.FC<{
       if (!edit) return;
       try {
         const { data } = await api.get(`/users/${edit.id}/working-hours`);
-        // data puede ser null (hereda) o { monday:{active,open,close}, ... }
         if (!alive) return;
         if (data == null) {
           setInheritTenant(true);
           setWeek(defaultWeek());
         } else {
-          // Normalizar a WeekState
           const w: WeekState = defaultWeek();
           (Object.keys(w) as DayKey[]).forEach(k => {
             const d = data[k];
@@ -418,6 +419,7 @@ const StaffModal: React.FC<{
     const out: any = {};
     (Object.keys(week) as DayKey[]).forEach(k => {
       const d = week[k];
+      // Construye el payload con las claves en español
       out[k] = d.active
         ? { active: true, open: toTime(d.open), close: toTime(d.close) }
         : { active: false, open: null, close: null };
@@ -437,14 +439,12 @@ const StaffModal: React.FC<{
       if (!commissionMasked.trim()) { alert("Porcentaje de comisión requerido para tipo 'comisión'"); return; }
     }
 
-    // Construir números/máscaras
     const baseSalaryNumber = paymentType === "salary" ? parseCOPToNumber(salaryMasked) : 0;
     const commissionDecimal = paymentType === "commission" ? parsePercentToDecimal(commissionMasked) : null;
 
-    // Construir horario (puede lanzar error si hay incongruencias)
     let working_hours: any | null = null;
     try {
-      working_hours = buildWorkingHoursPayload(); // null si hereda
+      working_hours = buildWorkingHoursPayload();
     } catch (e: any) {
       alert(e?.message || "Horario inválido");
       return;
@@ -462,7 +462,7 @@ const StaffModal: React.FC<{
           payment_type: paymentType,
           base_salary: baseSalaryNumber,
           commission_rate: commissionDecimal,
-          working_hours, // <- puede ser null para heredar
+          working_hours,
         };
         await api.put(`/users/${edit.id}`, body);
         await saveAssignments(edit.id);
@@ -479,7 +479,7 @@ const StaffModal: React.FC<{
           payment_type: paymentType,
           base_salary: baseSalaryNumber,
           commission_rate: commissionDecimal,
-          working_hours, // <- puede ser null para heredar
+          working_hours,
         };
         const { data: created } = await api.post(`/users`, body);
         const newId = created?.id;
@@ -488,7 +488,7 @@ const StaffModal: React.FC<{
       onSaved();
       onClose();
     } catch (e:any) {
-      alert(e?.response?.data?.message || e?.message || 'No se pudo guardar el personal');
+      alert(e?.response?.data?.message || e?.response?.data?.error || e?.message || 'No se pudo guardar el personal');
     } finally {
       setSaving(false);
     }
@@ -516,7 +516,6 @@ const StaffModal: React.FC<{
             <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="3001234567" />
           </Col>
 
-          {/* Password + ojito (solo al crear) */}
           {!edit && (
             <Col md={6}>
               <Label className="form-label">Contraseña</Label>
@@ -551,7 +550,6 @@ const StaffModal: React.FC<{
             </Input>
           </Col>
 
-          {/* Máscaras: Salario COP ó Comisión % */}
           {paymentType === "salary" ? (
             <Col md={6}>
               <Label className="form-label">Salario base</Label>
@@ -572,7 +570,6 @@ const StaffModal: React.FC<{
             </Col>
           )}
 
-          {/* ——— TABS: Servicios / Horarios ——— */}
           <Col md={12}>
             <Nav tabs className="mb-3">
               <NavItem>
@@ -596,7 +593,6 @@ const StaffModal: React.FC<{
             </Nav>
 
             <TabContent activeTab={tab}>
-              {/* Tab Servicios */}
               <TabPane tabId="services">
                 <ServiceMultiSelect
                   services={services}
@@ -608,7 +604,6 @@ const StaffModal: React.FC<{
                 />
               </TabPane>
 
-              {/* Tab Horarios */}
               <TabPane tabId="hours">
                 <div className="border rounded p-3">
                   <div className="form-check form-switch mb-3">
@@ -628,7 +623,7 @@ const StaffModal: React.FC<{
                     <>
                       {DAYS_UI.map(({ key, label }) => {
                         const d = week[key];
-                        const isMonday = key === "monday";
+                        const isMonday = key === "lunes";
                         return (
                           <div className="border rounded p-3 mb-3" key={key}>
                             <div className="d-flex align-items-center justify-content-between flex-wrap gap-3">
@@ -730,7 +725,6 @@ const Personal: React.FC = () => {
     return staff.slice(start, end);
   }, [staff, page]);
 
-  // Si cambia el staff (carga/eliminación), ajustar página si quedó fuera de rango
   useEffect(() => {
     if (page > totalPages) {
       setPage(totalPages);
@@ -788,7 +782,6 @@ const Personal: React.FC = () => {
       const arr = Array.isArray(data) ? data : [];
       setStaff(arr);
       await loadAssignedForStaff(arr);
-      // Reinicia a la primera página cuando recargas
       setPage(1);
     } catch (e:any) {
       setError(e?.response?.data?.message || e?.message || 'No se pudo cargar el personal');
@@ -814,15 +807,13 @@ const Personal: React.FC = () => {
     try {
       await api.delete(`/users/${u.id}`);
       await loadStaff();
-      // Si después de eliminar quedaste en una página vacía, el effect de arriba corrige a la anterior
     } catch (e:any) {
       alert(e?.response?.data?.message || e?.message || 'No se pudo eliminar el personal');
     }
   };
 
-  // Render números de página (ventana alrededor de la página actual)
   const renderPageNumbers = () => {
-    const windowSize = 5; // cantidad de botones visibles
+    const windowSize = 5;
     let start = Math.max(1, page - Math.floor(windowSize / 2));
     let end = start + windowSize - 1;
     if (end > totalPages) {
@@ -909,7 +900,6 @@ const Personal: React.FC = () => {
         </Table>
       </div>
 
-      {/* Controles de paginación — SIEMPRE visibles */}
       <div className="d-flex justify-content-end">
         <Pagination className="pagination-separated mb-0">
           <PaginationItem disabled={page === 1}>
