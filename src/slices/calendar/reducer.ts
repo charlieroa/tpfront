@@ -1,4 +1,4 @@
-// Archivo COMPLETO y FINAL: src/slices/calendar/reducer.ts
+// Archivo COMPLETO y SEGURO: src/slices/calendar/reducer.ts
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
@@ -10,9 +10,9 @@ export interface CalendarState {
   categories: any[];
   nextAvailableStylist: any | null;
   availableSlots: string[];
+  tenantWorkingHours: any | null; // <-- (1) NUEVA PROPIEDAD
   error: object | string;
   loading: boolean;
-  // ✅ El flag 'isAppointmentCreated' ha sido ELIMINADO.
 }
 
 export const initialState: CalendarState = {
@@ -27,6 +27,7 @@ export const initialState: CalendarState = {
   ],
   nextAvailableStylist: null,
   availableSlots: [],
+  tenantWorkingHours: null, // <-- (2) VALOR INICIAL
   error: {},
   loading: true,
 };
@@ -61,10 +62,8 @@ const calendarSlice = createSlice({
     clearSlots(state) {
         state.availableSlots = [];
     },
-    // ✅ 'createAppointmentSuccess' ahora puede estar vacío o no existir,
-    // ya que el thunk de recarga de datos es suficiente. Lo mantenemos por si se usa en otro lado.
     createAppointmentSuccess(state) {
-        // No es necesario hacer nada aquí.
+        // Sin cambios
     },
     createAppointmentFail(state, action: PayloadAction<any>) {
       state.error = action.payload;
@@ -83,6 +82,18 @@ const calendarSlice = createSlice({
     updateAppointmentFail(state, action: PayloadAction<any>) {
         state.error = action.payload;
     },
+
+    // --- (3) NUEVAS ACCIONES PARA EL HORARIO DEL NEGOCIO ---
+    fetchTenantSettingsStart(state) {
+      // No necesitamos un loading aparte, pero la acción existe
+    },
+    fetchTenantSettingsSuccess(state, action: PayloadAction<any>) {
+      state.tenantWorkingHours = action.payload?.working_hours || null;
+    },
+    fetchTenantSettingsFail(state, action: PayloadAction<any>) {
+      state.error = action.payload;
+      state.tenantWorkingHours = null;
+    }
   },
 });
 
@@ -98,7 +109,11 @@ export const {
   createNewClientSuccess,
   createNewClientFail,
   updateAppointmentSuccess,
-  updateAppointmentFail
+  updateAppointmentFail,
+  // --- EXPORTAR LAS NUEVAS ACCIONES ---
+  fetchTenantSettingsStart,
+  fetchTenantSettingsSuccess,
+  fetchTenantSettingsFail,
 } = calendarSlice.actions;
 
 export default calendarSlice.reducer;

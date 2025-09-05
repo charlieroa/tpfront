@@ -44,7 +44,6 @@ type Service = {
 
 type AssignedSvc = { id: string; name: string };
 
-// --- CORRECCIÓN 1: DayKey en español ---
 type DayKey = "lunes" | "martes" | "miercoles" | "jueves" | "viernes" | "sabado" | "domingo";
 type DayState = { active: boolean; open: string; close: string };
 type WeekState = Record<DayKey, DayState>;
@@ -114,7 +113,6 @@ const toTime = (raw: string): string => {
 
 const DEFAULT_DAY: DayState = { active: false, open: "09:00", close: "17:00" };
 
-// --- CORRECCIÓN 2: defaultWeek en español ---
 const defaultWeek = (): WeekState => ({
   lunes:     { ...DEFAULT_DAY },
   martes:    { ...DEFAULT_DAY },
@@ -125,7 +123,6 @@ const defaultWeek = (): WeekState => ({
   domingo:   { ...DEFAULT_DAY },
 });
 
-// --- CORRECCIÓN 3: DAYS_UI en español ---
 const DAYS_UI: { key: DayKey; label: string }[] = [
   { key: "lunes",     label: "Lunes" },
   { key: "martes",    label: "Martes" },
@@ -341,7 +338,7 @@ const StaffModal: React.FC<{
     setWeek(prev => ({ ...prev, [day]: { ...prev[day], [field]: value } }));
 
   const applyMondayToAll = () => {
-    const monday = week.lunes; // Se usa la clave en español
+    const monday = week.lunes;
     setWeek(prev => {
       const next: WeekState = { ...prev };
       (Object.keys(next) as DayKey[]).forEach(k => {
@@ -380,28 +377,53 @@ const StaffModal: React.FC<{
       } catch { /* ignore */ }
     };
 
+    // =================================================================
+    // FUNCIÓN CORREGIDA
+    // =================================================================
     const fetchWorkingHours = async () => {
       if (!edit) return;
+
+      // Mapa para traducir las claves del frontend (español) al backend (inglés)
+      const keyMap: Record<DayKey, string> = {
+        lunes: "monday",
+        martes: "tuesday",
+        miercoles: "wednesday",
+        jueves: "thursday",
+        viernes: "friday",
+        sabado: "saturday",
+        domingo: "sunday",
+      };
+
       try {
         const { data } = await api.get(`/users/${edit.id}/working-hours`);
         if (!alive) return;
+
         if (data == null) {
+          // Si no hay horario personalizado, hereda el del negocio (esto está bien)
           setInheritTenant(true);
           setWeek(defaultWeek());
         } else {
+          // Si SÍ hay horario, lo leemos y mapeamos correctamente
           const w: WeekState = defaultWeek();
-          (Object.keys(w) as DayKey[]).forEach(k => {
-            const d = data[k];
-            if (d) {
-              w[k] = {
-                active: !!d.active,
-                open: d.open ? toTime(d.open) : "09:00",
-                close: d.close ? toTime(d.close) : "17:00",
+          (Object.keys(w) as DayKey[]).forEach(keyEnEspanol => {
+            
+            // 1. Obtenemos la clave en inglés correspondiente
+            const keyEnIngles = keyMap[keyEnEspanol];
+
+            // 2. Buscamos en los datos de la API usando la clave en INGLÉS
+            const dayDataFromApi = data[keyEnIngles];
+            
+            if (dayDataFromApi) {
+              // 3. Si encontramos datos, actualizamos nuestro estado en español
+              w[keyEnEspanol] = {
+                active: !!dayDataFromApi.active,
+                open: dayDataFromApi.open ? toTime(dayDataFromApi.open) : "09:00",
+                close: dayDataFromApi.close ? toTime(dayDataFromApi.close) : "17:00",
               };
             }
           });
           setInheritTenant(false);
-          setWeek(w);
+          setWeek(w); // Ahora 'w' contiene los datos correctos de la API
         }
       } catch { /* ignore */ }
     };
@@ -416,11 +438,23 @@ const StaffModal: React.FC<{
     if (inheritTenant) return null;
     const err = validateWeek(week);
     if (err) throw new Error(err);
+
+    // El backend espera claves en inglés, así que las traducimos al enviar
+    const keyMapToEnglish: Record<DayKey, string> = {
+      lunes: "monday",
+      martes: "tuesday",
+      miercoles: "wednesday",
+      jueves: "thursday",
+      viernes: "friday",
+      sabado: "saturday",
+      domingo: "sunday",
+    };
+
     const out: any = {};
-    (Object.keys(week) as DayKey[]).forEach(k => {
-      const d = week[k];
-      // Construye el payload con las claves en español
-      out[k] = d.active
+    (Object.keys(week) as DayKey[]).forEach(keyEnEspanol => {
+      const d = week[keyEnEspanol];
+      const keyEnIngles = keyMapToEnglish[keyEnEspanol];
+      out[keyEnIngles] = d.active
         ? { active: true, open: toTime(d.open), close: toTime(d.close) }
         : { active: false, open: null, close: null };
     });
@@ -615,7 +649,7 @@ const StaffModal: React.FC<{
                       onChange={() => setInheritTenant(v => !v)}
                     />
                     <Label className="form-check-label ms-2" htmlFor="inheritSwitch">
-                      Usar el mismo horario del negocio, si marcas no puedes elegir su propio horario.
+                      Usar el mismo horario del negocio. Si desmarcas, puedes elegir su propio horario.
                     </Label>
                   </div>
 
