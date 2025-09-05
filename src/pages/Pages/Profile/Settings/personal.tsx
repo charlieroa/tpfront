@@ -11,7 +11,7 @@ import { api } from "../../../../services/api";
 import { getToken } from "../../../../services/auth";
 
 /* =========================
-   Tipos
+   Tipos (Sin cambios)
 ========================= */
 type PaymentType = "salary" | "commission";
 
@@ -49,724 +49,607 @@ type DayState = { active: boolean; open: string; close: string };
 type WeekState = Record<DayKey, DayState>;
 
 /* =========================
-   Helpers generales
+   Helpers generales (Sin cambios)
 ========================= */
 const decodeTenantId = (): string | null => {
-  try {
-    const t = getToken();
-    if (!t) return null;
-    const decoded: any = jwtDecode(t);
-    return decoded?.user?.tenant_id || decoded?.tenant_id || null;
-  } catch { return null; }
-};
-
+    try {
+      const t = getToken();
+      if (!t) return null;
+      const decoded: any = jwtDecode(t);
+      return decoded?.user?.tenant_id || decoded?.tenant_id || null;
+    } catch { return null; }
+  };
+  
 const formatCOP = (raw: string): string => {
-  const digits = (raw || "").replace(/\D/g, "");
-  if (!digits) return "";
-  const n = Number(digits);
-  try {
+const digits = (raw || "").replace(/\D/g, "");
+if (!digits) return "";
+const n = Number(digits);
+try {
     return `$${new Intl.NumberFormat("es-CO").format(n)}`;
-  } catch {
+} catch {
     return `$${digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`;
-  }
+}
 };
 
 const parseCOPToNumber = (masked: string): number => {
-  const digits = (masked || "").replace(/\D/g, "");
-  return digits ? Number(digits) : 0;
+const digits = (masked || "").replace(/\D/g, "");
+return digits ? Number(digits) : 0;
 };
 
 const formatPercent = (raw: string): string => {
-  let s = (raw || "").trim().replace(/\s+/g, "");
-  if (!s) return "";
-  if (s.endsWith("%")) s = s.slice(0, -1);
-  const val = Number(s);
-  if (!isFinite(val)) return "";
-  const pct = val <= 1 ? val * 100 : val;
-  const clean = Math.max(0, Math.min(100, pct));
-  const shown = Number.isInteger(clean) ? `${clean}` : clean.toFixed(2);
-  return `${shown}%`;
+let s = (raw || "").trim().replace(/\s+/g, "");
+if (!s) return "";
+if (s.endsWith("%")) s = s.slice(0, -1);
+const val = Number(s);
+if (!isFinite(val)) return "";
+const pct = val <= 1 ? val * 100 : val;
+const clean = Math.max(0, Math.min(100, pct));
+const shown = Number.isInteger(clean) ? `${clean}` : clean.toFixed(2);
+return `${shown}%`;
 };
 
 const parsePercentToDecimal = (masked: string): number | null => {
-  let s = (masked || "").trim();
-  if (!s) return null;
-  if (s.endsWith("%")) {
+let s = (masked || "").trim();
+if (!s) return null;
+if (s.endsWith("%")) {
     const n = Number(s.slice(0, -1));
     if (!isFinite(n)) return null;
     return Math.max(0, Math.min(100, n)) / 100;
-  }
-  const n = Number(s);
-  if (!isFinite(n)) return null;
-  return n <= 1 ? n : n / 100;
+}
+const n = Number(s);
+if (!isFinite(n)) return null;
+return n <= 1 ? n : n / 100;
 };
 
 const pad2 = (n: number) => (n < 10 ? `0${n}` : `${n}`);
 const toTime = (raw: string): string => {
-  const s = (raw || "").trim();
-  if (!s) return "09:00";
-  const [hStr, mStr] = s.split(":");
-  const h = Math.max(0, Math.min(23, Number(hStr || "0")));
-  const m = Math.max(0, Math.min(59, Number(mStr ?? "0")));
-  return `${pad2(h)}:${pad2(m)}`;
+const s = (raw || "").trim();
+if (!s) return "09:00";
+const [hStr, mStr] = s.split(":");
+const h = Math.max(0, Math.min(23, Number(hStr || "0")));
+const m = Math.max(0, Math.min(59, Number(mStr ?? "0")));
+return `${pad2(h)}:${pad2(m)}`;
 };
 
 const DEFAULT_DAY: DayState = { active: false, open: "09:00", close: "17:00" };
 
 const defaultWeek = (): WeekState => ({
-  lunes:     { ...DEFAULT_DAY },
-  martes:    { ...DEFAULT_DAY },
-  miercoles: { ...DEFAULT_DAY },
-  jueves:    { ...DEFAULT_DAY },
-  viernes:   { ...DEFAULT_DAY },
-  sabado:    { ...DEFAULT_DAY },
-  domingo:   { ...DEFAULT_DAY },
+lunes:     { ...DEFAULT_DAY },
+martes:    { ...DEFAULT_DAY },
+miercoles: { ...DEFAULT_DAY },
+jueves:    { ...DEFAULT_DAY },
+viernes:   { ...DEFAULT_DAY },
+sabado:    { ...DEFAULT_DAY },
+domingo:   { ...DEFAULT_DAY },
 });
 
 const DAYS_UI: { key: DayKey; label: string }[] = [
-  { key: "lunes",     label: "Lunes" },
-  { key: "martes",    label: "Martes" },
-  { key: "miercoles", label: "Miércoles" },
-  { key: "jueves",    label: "Jueves" },
-  { key: "viernes",   label: "Viernes" },
-  { key: "sabado",    label: "Sábado" },
-  { key: "domingo",   label: "Domingo" },
+{ key: "lunes",     label: "Lunes" },
+{ key: "martes",    label: "Martes" },
+{ key: "miercoles", label: "Miércoles" },
+{ key: "jueves",    label: "Jueves" },
+{ key: "viernes",   label: "Viernes" },
+{ key: "sabado",    label: "Sábado" },
+{ key: "domingo",   label: "Domingo" },
 ];
 
 const validateWeek = (week: WeekState): string | null => {
-  for (const { key, label } of DAYS_UI) {
+for (const { key, label } of DAYS_UI) {
     const d = week[key];
     if (d.active) {
-      const [sh, sm] = toTime(d.open).split(":").map(Number);
-      const [eh, em] = toTime(d.close).split(":").map(Number);
-      if (eh * 60 + em <= sh * 60 + sm) {
+    const [sh, sm] = toTime(d.open).split(":").map(Number);
+    const [eh, em] = toTime(d.close).split(":").map(Number);
+    if (eh * 60 + em <= sh * 60 + sm) {
         return `El horario de ${label} es inválido: fin debe ser mayor que inicio.`;
-      }
     }
-  }
-  return null;
+    }
+}
+return null;
 };
 
 /* =========================
-   Multiselect de Servicios con búsqueda
+   Componentes (Sin cambios)
 ========================= */
 const ServiceMultiSelect: React.FC<{
-  services: Service[];
-  categories: Category[];
-  selectedIds: string[];
-  onToggle: (id: string) => void;
-  catFilter: string | "all";
-  onCatFilter: (id: string | "all") => void;
-}> = ({ services, categories, selectedIds, onToggle, catFilter, onCatFilter }) => {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const searchRef = useRef<HTMLInputElement | null>(null);
-
-  const filtered = useMemo(() => {
-    const base = catFilter === "all" ? services : services.filter(s => s.category_id === catFilter);
-    const q = query.trim().toLowerCase();
-    if (!q) return base;
-    return base.filter(s =>
-      s.name.toLowerCase().includes(q) ||
-      (categories.find(c => c.id === s.category_id)?.name.toLowerCase() || "").includes(q)
-    );
-  }, [services, categories, catFilter, query]);
-
-  const selectedCount = selectedIds.length;
-
-  useEffect(() => {
-    if (open) {
-      setTimeout(() => searchRef.current?.focus(), 0);
-    } else {
-      setQuery("");
-    }
-  }, [open]);
-
-  return (
-    <div>
-      {/* Filtro por categoría */}
-      <div className="d-flex align-items-center flex-wrap gap-2 mb-2">
-        <Badge
-          pill
-          color={catFilter === "all" ? "primary" : "light"}
-          className={catFilter === "all" ? "" : "text-dark"}
-          style={{ cursor: "pointer" }}
-          onClick={() => onCatFilter("all")}
-        >
-          Todas las categorías
-        </Badge>
-        {categories.map(c => (
-          <Badge
-            key={c.id}
-            pill
-            color={catFilter === c.id ? "primary" : "light"}
-            className={catFilter === c.id ? "" : "text-dark"}
-            style={{ cursor: "pointer" }}
-            onClick={() => onCatFilter(c.id)}
-          >
-            {c.name}
-          </Badge>
-        ))}
-      </div>
-
-      {/* Dropdown con búsqueda y lista seleccionable */}
-      <UncontrolledDropdown isOpen={open} toggle={() => setOpen(v => !v)}>
-        <DropdownToggle caret color="light" className="w-100 d-flex justify-content-between align-items-center">
-          <span className="text-start">
-            {selectedCount === 0 ? "Selecciona servicios…" :
-              selectedCount === 1 ? "1 servicio seleccionado" :
-                `${selectedCount} servicios seleccionados`}
-          </span>
-        </DropdownToggle>
-        <DropdownMenu className="p-2" style={{ width: "100%", maxHeight: 360, overflowY: "auto" }}>
-          <div className="mb-2">
-            <Input
-              innerRef={searchRef}
-              placeholder="Buscar servicios…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </div>
-
-          <div>
-            {filtered.length === 0 && (
-              <div className="text-muted px-2 py-1">Sin resultados</div>
-            )}
-            {filtered.map(s => {
-              const checked = selectedIds.includes(s.id);
-              const catName = categories.find(c => c.id === s.category_id)?.name || "—";
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  className="dropdown-item d-flex align-items-center justify-content-between"
-                  onClick={() => onToggle(s.id)}
-                >
-                  <div className="me-2 text-start">
-                    <div className="fw-semibold">{s.name}</div>
-                    <div className="small text-muted">
-                      {s.duration_minutes} min · ${s.price.toLocaleString()} · {catName}
-                    </div>
-                  </div>
-                  <i className={`ri-check-line ${checked ? "" : "invisible"}`} />
-                </button>
-              );
-            })}
-          </div>
-        </DropdownMenu>
-      </UncontrolledDropdown>
-
-      {/* Seleccionados como chips */}
-      <div className="mt-2">
-        {selectedIds.length === 0 && <span className="text-muted">No hay servicios seleccionados.</span>}
-        {selectedIds.map(id => {
-          const s = services.find(x => x.id === id);
-          if (!s) return null;
-          return (
-            <Badge
-              key={id}
-              pill
-              color="light"
-              className="text-dark me-1 mb-1"
-              style={{ cursor: "pointer" }}
-              title="Quitar"
-              onClick={() => onToggle(id)}
-            >
-              {s.name} <i className="ri-close-line ms-1" />
-            </Badge>
-          );
-        })}
-      </div>
-    </div>
-  );
-};
-
-/* =========================
-   Modal Staff con TABS: Servicios / Horarios
-========================= */
-const StaffModal: React.FC<{
-  isOpen: boolean;
-  onClose: () => void;
-  onSaved: () => void;
-  tenantId: string;
-  services: Service[];
-  categories: Category[];
-  edit?: Staff | null;
-}> = ({ isOpen, onClose, onSaved, tenantId, services, categories, edit }) => {
-  const [saving, setSaving] = useState(false);
-
-  // Tab actual
-  const [tab, setTab] = useState<"services" | "hours">("services");
-
-  // Datos básicos
-  const [firstName, setFirstName] = useState(edit?.first_name || "");
-  const [lastName, setLastName] = useState(edit?.last_name || "");
-  const [email, setEmail] = useState(edit?.email || "");
-  const [phone, setPhone] = useState(edit?.phone || "");
-  const [paymentType, setPaymentType] = useState<PaymentType>((edit?.payment_type as PaymentType) || "salary");
-
-  // Máscaras
-  const [salaryMasked, setSalaryMasked] = useState<string>(
-    edit?.base_salary != null ? formatCOP(String(edit.base_salary)) : ""
-  );
-  const [commissionMasked, setCommissionMasked] = useState<string>(
-    edit?.commission_rate != null ? `${(edit.commission_rate * 100).toString()}%` : ""
-  );
-
-  // Password + ojo
-  const [password, setPassword] = useState<string>("");
-  const [showPass, setShowPass] = useState<boolean>(false);
-
-  // Servicios
-  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
-  const [catFilter, setCatFilter] = useState<string | "all">("all");
-
-  // Horarios
-  const [inheritTenant, setInheritTenant] = useState<boolean>(true); // si true => working_hours = null
-  const [week, setWeek] = useState<WeekState>(defaultWeek());
-
-  const toggleService = (id: string) => {
-    setSelectedServiceIds(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    );
-  };
-
-  const toggleDay = (day: DayKey) =>
-    setWeek(prev => ({ ...prev, [day]: { ...prev[day], active: !prev[day].active } }));
-
-  const changeHour = (day: DayKey, field: "open" | "close", value: string) =>
-    setWeek(prev => ({ ...prev, [day]: { ...prev[day], [field]: value } }));
-
-  const applyMondayToAll = () => {
-    const monday = week.lunes;
-    setWeek(prev => {
-      const next: WeekState = { ...prev };
-      (Object.keys(next) as DayKey[]).forEach(k => {
-        if (k === "lunes") return;
-        next[k] = { ...next[k], active: monday.active, open: monday.open, close: monday.close };
-      });
-      return next;
-    });
-  };
-
-  // Cargar preselección de servicios y horarios cuando edita
-  useEffect(() => {
-    setFirstName(edit?.first_name || "");
-    setLastName(edit?.last_name || "");
-    setEmail(edit?.email || "");
-    setPhone(edit?.phone || "");
-    setPaymentType((edit?.payment_type as PaymentType) || "salary");
-    setSalaryMasked(edit?.base_salary != null ? formatCOP(String(edit.base_salary)) : "");
-    setCommissionMasked(edit?.commission_rate != null ? `${(edit.commission_rate * 100).toString()}%` : "");
-    setPassword("");
-    setShowPass(false);
-    setSelectedServiceIds([]);
-    setCatFilter("all");
-    setTab("services");
-    setInheritTenant(true);
-    setWeek(defaultWeek());
-
-    let alive = true;
-
-    const fetchAssigned = async () => {
-      if (!edit) return;
-      try {
-        const { data } = await api.get(`/stylists/${edit.id}/services`);
-        const ids = Array.isArray(data) ? data.map((s: AssignedSvc) => s.id).filter(Boolean) : [];
-        if (alive) setSelectedServiceIds(ids);
-      } catch { /* ignore */ }
-    };
-
-    // =================================================================
-    // FUNCIÓN CORREGIDA
-    // =================================================================
-    const fetchWorkingHours = async () => {
-      if (!edit) return;
-
-      // Mapa para traducir las claves del frontend (español) al backend (inglés)
-      const keyMap: Record<DayKey, string> = {
-        lunes: "monday",
-        martes: "tuesday",
-        miercoles: "wednesday",
-        jueves: "thursday",
-        viernes: "friday",
-        sabado: "saturday",
-        domingo: "sunday",
-      };
-
-      try {
-        const { data } = await api.get(`/users/${edit.id}/working-hours`);
-        if (!alive) return;
-
-        if (data == null) {
-          // Si no hay horario personalizado, hereda el del negocio (esto está bien)
-          setInheritTenant(true);
-          setWeek(defaultWeek());
-        } else {
-          // Si SÍ hay horario, lo leemos y mapeamos correctamente
-          const w: WeekState = defaultWeek();
-          (Object.keys(w) as DayKey[]).forEach(keyEnEspanol => {
-            
-            // 1. Obtenemos la clave en inglés correspondiente
-            const keyEnIngles = keyMap[keyEnEspanol];
-
-            // 2. Buscamos en los datos de la API usando la clave en INGLÉS
-            const dayDataFromApi = data[keyEnIngles];
-            
-            if (dayDataFromApi) {
-              // 3. Si encontramos datos, actualizamos nuestro estado en español
-              w[keyEnEspanol] = {
-                active: !!dayDataFromApi.active,
-                open: dayDataFromApi.open ? toTime(dayDataFromApi.open) : "09:00",
-                close: dayDataFromApi.close ? toTime(dayDataFromApi.close) : "17:00",
-              };
-            }
-          });
-          setInheritTenant(false);
-          setWeek(w); // Ahora 'w' contiene los datos correctos de la API
-        }
-      } catch { /* ignore */ }
-    };
-
-    fetchAssigned();
-    fetchWorkingHours();
-
-    return () => { alive = false; };
-  }, [isOpen, edit]);
-
-  const buildWorkingHoursPayload = (): any | null => {
-    if (inheritTenant) return null;
-    const err = validateWeek(week);
-    if (err) throw new Error(err);
-
-    // El backend espera claves en inglés, así que las traducimos al enviar
-    const keyMapToEnglish: Record<DayKey, string> = {
-      lunes: "monday",
-      martes: "tuesday",
-      miercoles: "wednesday",
-      jueves: "thursday",
-      viernes: "friday",
-      sabado: "saturday",
-      domingo: "sunday",
-    };
-
-    const out: any = {};
-    (Object.keys(week) as DayKey[]).forEach(keyEnEspanol => {
-      const d = week[keyEnEspanol];
-      const keyEnIngles = keyMapToEnglish[keyEnEspanol];
-      out[keyEnIngles] = d.active
-        ? { active: true, open: toTime(d.open), close: toTime(d.close) }
-        : { active: false, open: null, close: null };
-    });
-    return out;
-  };
-
-  const saveAssignments = async (stylistId: string) => {
-    await api.post(`/stylists/${stylistId}/services`, { service_ids: selectedServiceIds });
-  };
-
-  const save = async () => {
-    if (!firstName.trim()) { alert("El nombre es obligatorio"); return; }
-    if (paymentType === "salary") {
-      if (!salaryMasked.trim()) { alert("Base salarial requerida para tipo 'salario'"); return; }
-    } else {
-      if (!commissionMasked.trim()) { alert("Porcentaje de comisión requerido para tipo 'comisión'"); return; }
-    }
-
-    const baseSalaryNumber = paymentType === "salary" ? parseCOPToNumber(salaryMasked) : 0;
-    const commissionDecimal = paymentType === "commission" ? parsePercentToDecimal(commissionMasked) : null;
-
-    let working_hours: any | null = null;
-    try {
-      working_hours = buildWorkingHoursPayload();
-    } catch (e: any) {
-      alert(e?.message || "Horario inválido");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      if (edit) {
-        const body: any = {
-          first_name: firstName.trim(),
-          last_name: lastName.trim() || null,
-          email: email.trim() || null,
-          phone: phone.trim() || null,
-          role_id: 3,
-          payment_type: paymentType,
-          base_salary: baseSalaryNumber,
-          commission_rate: commissionDecimal,
-          working_hours,
-        };
-        await api.put(`/users/${edit.id}`, body);
-        await saveAssignments(edit.id);
+    services: Service[];
+    categories: Category[];
+    selectedIds: string[];
+    onToggle: (id: string) => void;
+    catFilter: string | "all";
+    onCatFilter: (id: string | "all") => void;
+  }> = ({ services, categories, selectedIds, onToggle, catFilter, onCatFilter }) => {
+    const [open, setOpen] = useState(false);
+    const [query, setQuery] = useState("");
+    const searchRef = useRef<HTMLInputElement | null>(null);
+  
+    const filtered = useMemo(() => {
+      const base = catFilter === "all" ? services : services.filter(s => s.category_id === catFilter);
+      const q = query.trim().toLowerCase();
+      if (!q) return base;
+      return base.filter(s =>
+        s.name.toLowerCase().includes(q) ||
+        (categories.find(c => c.id === s.category_id)?.name.toLowerCase() || "").includes(q)
+      );
+    }, [services, categories, catFilter, query]);
+  
+    const selectedCount = selectedIds.length;
+  
+    useEffect(() => {
+      if (open) {
+        setTimeout(() => searchRef.current?.focus(), 0);
       } else {
-        if (!password.trim()) { alert("La contraseña es obligatoria para crear un estilista"); setSaving(false); return; }
-        const body: any = {
-          tenant_id: tenantId,
-          role_id: 3,
+        setQuery("");
+      }
+    }, [open]);
+  
+    return (
+      <div>
+        <div className="d-flex align-items-center flex-wrap gap-2 mb-2">
+          <Badge
+            pill
+            color={catFilter === "all" ? "primary" : "light"}
+            className={catFilter === "all" ? "" : "text-dark"}
+            style={{ cursor: "pointer" }}
+            onClick={() => onCatFilter("all")}
+          >
+            Todas las categorías
+          </Badge>
+          {categories.map(c => (
+            <Badge
+              key={c.id}
+              pill
+              color={catFilter === c.id ? "primary" : "light"}
+              className={catFilter === c.id ? "" : "text-dark"}
+              style={{ cursor: "pointer" }}
+              onClick={() => onCatFilter(c.id)}
+            >
+              {c.name}
+            </Badge>
+          ))}
+        </div>
+  
+        <UncontrolledDropdown isOpen={open} toggle={() => setOpen(v => !v)}>
+          <DropdownToggle caret color="light" className="w-100 d-flex justify-content-between align-items-center">
+            <span className="text-start">
+              {selectedCount === 0 ? "Selecciona servicios…" :
+                selectedCount === 1 ? "1 servicio seleccionado" :
+                  `${selectedCount} servicios seleccionados`}
+            </span>
+          </DropdownToggle>
+          <DropdownMenu className="p-2" style={{ width: "100%", maxHeight: 360, overflowY: "auto" }}>
+            <div className="mb-2">
+              <Input
+                innerRef={searchRef}
+                placeholder="Buscar servicios…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+  
+            <div>
+              {filtered.length === 0 && (
+                <div className="text-muted px-2 py-1">Sin resultados</div>
+              )}
+              {filtered.map(s => {
+                const checked = selectedIds.includes(s.id);
+                const catName = categories.find(c => c.id === s.category_id)?.name || "—";
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className="dropdown-item d-flex align-items-center justify-content-between"
+                    onClick={() => onToggle(s.id)}
+                  >
+                    <div className="me-2 text-start">
+                      <div className="fw-semibold">{s.name}</div>
+                      <div className="small text-muted">
+                        {s.duration_minutes} min · ${s.price.toLocaleString()} · {catName}
+                      </div>
+                    </div>
+                    <i className={`ri-check-line ${checked ? "" : "invisible"}`} />
+                  </button>
+                );
+              })}
+            </div>
+          </DropdownMenu>
+        </UncontrolledDropdown>
+  
+        <div className="mt-2">
+          {selectedIds.length === 0 && <span className="text-muted">No hay servicios seleccionados.</span>}
+          {selectedIds.map(id => {
+            const s = services.find(x => x.id === id);
+            if (!s) return null;
+            return (
+              <Badge
+                key={id}
+                pill
+                color="light"
+                className="text-dark me-1 mb-1"
+                style={{ cursor: "pointer" }}
+                title="Quitar"
+                onClick={() => onToggle(id)}
+              >
+                {s.name} <i className="ri-close-line ms-1" />
+              </Badge>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+const StaffModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    onSaved: () => void;
+    tenantId: string;
+    services: Service[];
+    categories: Category[];
+    edit?: Staff | null;
+  }> = ({ isOpen, onClose, onSaved, tenantId, services, categories, edit }) => {
+    const [saving, setSaving] = useState(false);
+    const [tab, setTab] = useState<"services" | "hours">("services");
+    
+    const [roleId, setRoleId] = useState<number>(edit?.role_id || 3); 
+    
+    const [firstName, setFirstName] = useState("");
+    const [lastName, setLastName] = useState("");
+    const [email, setEmail] = useState("");
+    const [phone, setPhone] = useState("");
+    const [paymentType, setPaymentType] = useState<PaymentType>("salary");
+    const [salaryMasked, setSalaryMasked] = useState<string>("");
+    const [commissionMasked, setCommissionMasked] = useState<string>("");
+    const [password, setPassword] = useState<string>("");
+    const [showPass, setShowPass] = useState<boolean>(false);
+    const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
+    const [catFilter, setCatFilter] = useState<string | "all">("all");
+    const [inheritTenant, setInheritTenant] = useState<boolean>(true);
+    const [week, setWeek] = useState<WeekState>(defaultWeek());
+  
+    const toggleService = (id: string) => {
+      setSelectedServiceIds(prev =>
+        prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+      );
+    };
+  
+    const toggleDay = (day: DayKey) =>
+      setWeek(prev => ({ ...prev, [day]: { ...prev[day], active: !prev[day].active } }));
+  
+    const changeHour = (day: DayKey, field: "open" | "close", value: string) =>
+      setWeek(prev => ({ ...prev, [day]: { ...prev[day], [field]: value } }));
+  
+    const applyMondayToAll = () => {
+      const monday = week.lunes;
+      setWeek(prev => {
+        const next: WeekState = { ...prev };
+        (Object.keys(next) as DayKey[]).forEach(k => {
+          if (k === "lunes") return;
+          next[k] = { ...next[k], active: monday.active, open: monday.open, close: monday.close };
+        });
+        return next;
+      });
+    };
+  
+    useEffect(() => {
+      const isEditing = !!edit;
+      const currentRoleId = isEditing ? edit.role_id : 3; 
+      
+      setRoleId(currentRoleId);
+      setFirstName(isEditing ? edit.first_name : "");
+      setLastName(isEditing ? edit.last_name || "" : "");
+      setEmail(isEditing ? edit.email || "" : "");
+      setPhone(isEditing ? edit.phone || "" : "");
+      
+      const currentPaymentType = isEditing && currentRoleId === 3 ? (edit.payment_type as PaymentType) || "salary" : "salary";
+      setPaymentType(currentPaymentType);
+      
+      setSalaryMasked(isEditing && edit.base_salary != null ? formatCOP(String(edit.base_salary)) : "");
+      setCommissionMasked(isEditing && edit.commission_rate != null ? `${(edit.commission_rate * 100).toString()}%` : "");
+      
+      setPassword("");
+      setShowPass(false);
+      setSelectedServiceIds([]);
+      setCatFilter("all");
+      setTab("services");
+      setInheritTenant(true);
+      setWeek(defaultWeek());
+  
+      let alive = true;
+  
+      if (isEditing && edit.role_id === 3) {
+          const fetchAssigned = async () => {
+              try {
+                  const { data } = await api.get(`/stylists/${edit.id}/services`);
+                  const ids = Array.isArray(data) ? data.map((s: AssignedSvc) => s.id).filter(Boolean) : [];
+                  if (alive) setSelectedServiceIds(ids);
+              } catch { /* ignore */ }
+          };
+  
+          const fetchWorkingHours = async () => {
+              const keyMap: Record<DayKey, string> = { lunes: "monday", martes: "tuesday", miercoles: "wednesday", jueves: "thursday", viernes: "friday", sabado: "saturday", domingo: "sunday" };
+              try {
+                  const { data } = await api.get(`/users/${edit.id}/working-hours`);
+                  if (!alive) return;
+                  if (data == null) {
+                      setInheritTenant(true);
+                      setWeek(defaultWeek());
+                  } else {
+                      const w: WeekState = defaultWeek();
+                      (Object.keys(w) as DayKey[]).forEach(k => {
+                          const keyEnIngles = keyMap[k];
+                          const dayData = data[keyEnIngles];
+                          if (dayData) {
+                              w[k] = { active: !!dayData.active, open: dayData.open ? toTime(dayData.open) : "09:00", close: dayData.close ? toTime(dayData.close) : "17:00" };
+                          }
+                      });
+                      setInheritTenant(false);
+                      setWeek(w);
+                  }
+              } catch { /* ignore */ }
+          };
+  
+          fetchAssigned();
+          fetchWorkingHours();
+      }
+      
+      return () => { alive = false; };
+    }, [isOpen, edit]);
+    
+    useEffect(() => {
+      if (roleId === 2) { // 2 = Cajero
+          setPaymentType("salary");
+      }
+    }, [roleId]);
+  
+  
+    const buildWorkingHoursPayload = (): any | null => {
+      if (inheritTenant) return null;
+      const err = validateWeek(week);
+      if (err) throw new Error(err);
+      const keyMapToEnglish: Record<DayKey, string> = { lunes: "monday", martes: "tuesday", miercoles: "wednesday", jueves: "thursday", viernes: "friday", sabado: "saturday", domingo: "sunday" };
+      const out: any = {};
+      (Object.keys(week) as DayKey[]).forEach(k => {
+        const d = week[k];
+        const keyEnIngles = keyMapToEnglish[k];
+        out[keyEnIngles] = d.active ? { active: true, open: toTime(d.open), close: toTime(d.close) } : { active: false, open: null, close: null };
+      });
+      return out;
+    };
+  
+    const saveAssignments = async (stylistId: string) => {
+      await api.post(`/stylists/${stylistId}/services`, { service_ids: selectedServiceIds });
+    };
+    
+    const save = async () => {
+      if (!firstName.trim()) { alert("El nombre es obligatorio"); return; }
+  
+      if (!salaryMasked.trim() && paymentType === 'salary') { alert("El salario base es requerido"); return; }
+  
+      const isStylist = roleId === 3;
+      let working_hours: any | null = null;
+      if (isStylist) {
+          try {
+              working_hours = buildWorkingHoursPayload();
+          } catch (e: any) {
+              alert(e?.message || "Horario inválido");
+              return;
+          }
+      }
+  
+      setSaving(true);
+      try {
+        const baseBody = {
           first_name: firstName.trim(),
           last_name: lastName.trim() || null,
           email: email.trim() || null,
           phone: phone.trim() || null,
-          password: password.trim(),
+          role_id: roleId,
           payment_type: paymentType,
-          base_salary: baseSalaryNumber,
-          commission_rate: commissionDecimal,
-          working_hours,
+          base_salary: parseCOPToNumber(salaryMasked),
+          commission_rate: (isStylist && paymentType === 'commission') ? parsePercentToDecimal(commissionMasked) : null,
+          working_hours: isStylist ? working_hours : undefined,
         };
-        const { data: created } = await api.post(`/users`, body);
-        const newId = created?.id;
-        if (newId) await saveAssignments(newId);
+  
+        if (edit) {
+          await api.put(`/users/${edit.id}`, baseBody);
+          if (isStylist) await saveAssignments(edit.id);
+        } else {
+          if (!password.trim()) { alert("La contraseña es obligatoria para crear personal"); setSaving(false); return; }
+          const createBody = {
+              ...baseBody,
+              tenant_id: tenantId,
+              password: password.trim(),
+          };
+          const { data: created } = await api.post(`/users`, createBody);
+          if (created?.id && isStylist) await saveAssignments(created.id);
+        }
+        onSaved();
+        onClose();
+      } catch (e:any) {
+        alert(e?.response?.data?.message || e?.response?.data?.error || e?.message || 'No se pudo guardar el personal');
+      } finally {
+        setSaving(false);
       }
-      onSaved();
-      onClose();
-    } catch (e:any) {
-      alert(e?.response?.data?.message || e?.response?.data?.error || e?.message || 'No se pudo guardar el personal');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Modal isOpen={isOpen} toggle={onClose} size="lg" centered>
-      <ModalHeader toggle={onClose}>{edit ? "Editar estilista" : "Nuevo estilista"}</ModalHeader>
-      <ModalBody>
-        <Row className="g-3">
-          <Col md={6}>
-            <Label className="form-label">Nombre</Label>
-            <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="Ej: Marcos" />
-          </Col>
-          <Col md={6}>
-            <Label className="form-label">Apellido</Label>
-            <Input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Ej: Barbero" />
-          </Col>
-          <Col md={6}>
-            <Label className="form-label">Email</Label>
-            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="marcos@example.com" />
-          </Col>
-          <Col md={6}>
-            <Label className="form-label">Teléfono</Label>
-            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="3001234567" />
-          </Col>
-
-          {!edit && (
-            <Col md={6}>
-              <Label className="form-label">Contraseña</Label>
-              <div className="input-group">
+    };
+    
+    const roleName = roleId === 2 ? "Cajero" : "Estilista";
+  
+    return (
+      <Modal isOpen={isOpen} toggle={onClose} size="lg" centered>
+        <ModalHeader toggle={onClose}>{edit ? `Editar ${roleName}` : `Nuevo Personal`}</ModalHeader>
+        <ModalBody>
+          <Row className="g-3">
+          
+            {!edit && (
+              <Col md={12}>
+                <Label className="form-label">Tipo de Personal</Label>
                 <Input
-                  type={showPass ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                />
-                <Button
-                  type="button"
-                  color="light"
-                  onClick={() => setShowPass(v => !v)}
-                  title={showPass ? "Ocultar" : "Mostrar"}
+                  type="select"
+                  value={roleId}
+                  onChange={(e) => setRoleId(Number(e.target.value))}
                 >
-                  <i className={showPass ? "ri-eye-off-line" : "ri-eye-line"} />
-                </Button>
-              </div>
-            </Col>
-          )}
-
-          <Col md={6}>
-            <Label className="form-label">Tipo de pago</Label>
-            <Input
-              type="select"
-              value={paymentType}
-              onChange={(e) => setPaymentType(e.target.value as PaymentType)}
-            >
-              <option value="salary">Salario</option>
-              <option value="commission">Comisión</option>
-            </Input>
-          </Col>
-
-          {paymentType === "salary" ? (
+                  <option value={3}>Estilista</option>
+                  <option value={2}>Cajero</option>
+                </Input>
+              </Col>
+            )}
+  
             <Col md={6}>
-              <Label className="form-label">Salario base</Label>
-              <Input
-                value={salaryMasked}
-                placeholder="$500.000"
-                onChange={(e) => setSalaryMasked(formatCOP(e.target.value))}
-              />
+              <Label className="form-label">Nombre</Label>
+              <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="Ej: Marcos" />
             </Col>
-          ) : (
             <Col md={6}>
-              <Label className="form-label">Comisión</Label>
-              <Input
-                value={commissionMasked}
-                placeholder="55%"
-                onChange={(e) => setCommissionMasked(formatPercent(e.target.value))}
-              />
+              <Label className="form-label">Apellido</Label>
+              <Input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Ej: Barbero" />
             </Col>
-          )}
-
-          <Col md={12}>
-            <Nav tabs className="mb-3">
-              <NavItem>
-                <NavLink
-                  role="button"
-                  className={classnames({ active: tab === "services" })}
-                  onClick={() => setTab("services")}
-                >
-                  <i className="ri-scissors-2-line me-1" /> Servicios que realiza
-                </NavLink>
-              </NavItem>
-              <NavItem>
-                <NavLink
-                  role="button"
-                  className={classnames({ active: tab === "hours" })}
-                  onClick={() => setTab("hours")}
-                >
-                  <i className="ri-time-line me-1" /> Horarios
-                </NavLink>
-              </NavItem>
-            </Nav>
-
-            <TabContent activeTab={tab}>
-              <TabPane tabId="services">
-                <ServiceMultiSelect
-                  services={services}
-                  categories={categories}
-                  selectedIds={selectedServiceIds}
-                  onToggle={toggleService}
-                  catFilter={catFilter}
-                  onCatFilter={setCatFilter}
-                />
-              </TabPane>
-
-              <TabPane tabId="hours">
-                <div className="border rounded p-3">
-                  <div className="form-check form-switch mb-3">
-                    <Input
-                      id="inheritSwitch"
-                      className="form-check-input"
-                      type="checkbox"
-                      checked={inheritTenant}
-                      onChange={() => setInheritTenant(v => !v)}
-                    />
-                    <Label className="form-check-label ms-2" htmlFor="inheritSwitch">
-                      Usar el mismo horario del negocio. Si desmarcas, puedes elegir su propio horario.
-                    </Label>
-                  </div>
-
-                  {!inheritTenant && (
-                    <>
-                      {DAYS_UI.map(({ key, label }) => {
-                        const d = week[key];
-                        const isMonday = key === "lunes";
-                        return (
-                          <div className="border rounded p-3 mb-3" key={key}>
-                            <div className="d-flex align-items-center justify-content-between flex-wrap gap-3">
-                              <div className="form-check form-switch">
-                                <Input
-                                  className="form-check-input"
-                                  type="checkbox"
-                                  id={`active-${key}`}
-                                  checked={d.active}
-                                  onChange={() => toggleDay(key)}
-                                />
-                                <Label className="form-check-label fw-semibold ms-2" htmlFor={`active-${key}`}>
-                                  {label} {d.active ? "(Abierto)" : "(Cerrado)"}
-                                </Label>
-                              </div>
-                              <div className="d-flex align-items-center gap-3">
-                                <div className="d-flex align-items-center gap-2">
-                                  <Label className="mb-0" htmlFor={`open-${key}`}>Inicio</Label>
-                                  <Input
-                                    id={`open-${key}`}
-                                    type="time"
-                                    value={d.open}
-                                    disabled={!d.active}
-                                    onChange={(e) => changeHour(key, "open", e.target.value)}
-                                  />
-                                </div>
-                                <div className="d-flex align-items-center gap-2">
-                                  <Label className="mb-0" htmlFor={`close-${key}`}>Fin</Label>
-                                  <Input
-                                    id={`close-${key}`}
-                                    type="time"
-                                    value={d.close}
-                                    disabled={!d.active}
-                                    onChange={(e) => changeHour(key, "close", e.target.value)}
-                                  />
-                                </div>
-                                {isMonday && (
-                                  <Button type="button" size="sm" color="secondary" className="ms-2" onClick={applyMondayToAll}>
-                                    Aplicar a todos
-                                  </Button>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </>
-                  )}
+            <Col md={6}>
+              <Label className="form-label">Email</Label>
+              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="marcos@example.com" />
+            </Col>
+            <Col md={6}>
+              <Label className="form-label">Teléfono</Label>
+              <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="3001234567" />
+            </Col>
+  
+            {!edit && (
+              <Col md={6}>
+                <Label className="form-label">Contraseña</Label>
+                <div className="input-group">
+                  <Input type={showPass ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••"/>
+                  <Button type="button" color="light" onClick={() => setShowPass(v => !v)} title={showPass ? "Ocultar" : "Mostrar"}>
+                    <i className={showPass ? "ri-eye-off-line" : "ri-eye-line"} />
+                  </Button>
                 </div>
-              </TabPane>
-            </TabContent>
-          </Col>
-        </Row>
-      </ModalBody>
-
-      <ModalFooter>
-        <Button color="secondary" onClick={onClose}>Cancelar</Button>
-        <Button color="primary" onClick={save} disabled={saving}>
-          {saving && <Spinner size="sm" className="me-2" />} Guardar
-        </Button>
-      </ModalFooter>
-    </Modal>
-  );
-};
-
+              </Col>
+            )}
+            
+            {roleId === 3 && (
+              <Col md={6}>
+                  <Label className="form-label">Tipo de pago</Label>
+                  <Input type="select" value={paymentType} onChange={(e) => setPaymentType(e.target.value as PaymentType)}>
+                  <option value="salary">Salario</option>
+                  <option value="commission">Comisión</option>
+                  </Input>
+              </Col>
+            )}
+  
+            {paymentType === "salary" ? (
+              <Col md={6}>
+                <Label className="form-label">Salario base</Label>
+                <Input value={salaryMasked} placeholder="$500.000" onChange={(e) => setSalaryMasked(formatCOP(e.target.value))} />
+              </Col>
+            ) : (
+              roleId === 3 && (
+                  <Col md={6}>
+                      <Label className="form-label">Comisión</Label>
+                      <Input value={commissionMasked} placeholder="55%" onChange={(e) => setCommissionMasked(formatPercent(e.target.value))} />
+                  </Col>
+              )
+            )}
+            
+            {roleId === 3 && (
+              <Col md={12}>
+                  <Nav tabs className="mb-3">
+                  <NavItem>
+                      <NavLink role="button" className={classnames({ active: tab === "services" })} onClick={() => setTab("services")}>
+                      <i className="ri-scissors-2-line me-1" /> Servicios que realiza
+                      </NavLink>
+                  </NavItem>
+                  <NavItem>
+                      <NavLink role="button" className={classnames({ active: tab === "hours" })} onClick={() => setTab("hours")}>
+                      <i className="ri-time-line me-1" /> Horarios
+                      </NavLink>
+                  </NavItem>
+                  </Nav>
+  
+                  <TabContent activeTab={tab}>
+                  <TabPane tabId="services">
+                      <ServiceMultiSelect services={services} categories={categories} selectedIds={selectedServiceIds} onToggle={toggleService} catFilter={catFilter} onCatFilter={setCatFilter} />
+                  </TabPane>
+                  <TabPane tabId="hours">
+                      <div className="border rounded p-3">
+                      <div className="form-check form-switch mb-3">
+                          <Input id="inheritSwitch" className="form-check-input" type="checkbox" checked={inheritTenant} onChange={() => setInheritTenant(v => !v)} />
+                          <Label className="form-check-label ms-2" htmlFor="inheritSwitch">
+                              Usar el mismo horario del negocio. Si desmarcas, puedes elegir su propio horario.
+                          </Label>
+                      </div>
+                      {!inheritTenant && (
+                          <>
+                          {DAYS_UI.map(({ key, label }) => {
+                              const d = week[key];
+                              const isMonday = key === "lunes";
+                              return (
+                              <div className="border rounded p-3 mb-3" key={key}>
+                                  <div className="d-flex align-items-center justify-content-between flex-wrap gap-3">
+                                  <div className="form-check form-switch">
+                                      <Input className="form-check-input" type="checkbox" id={`active-${key}`} checked={d.active} onChange={() => toggleDay(key)} />
+                                      <Label className="form-check-label fw-semibold ms-2" htmlFor={`active-${key}`}>
+                                      {label} {d.active ? "(Abierto)" : "(Cerrado)"}
+                                      </Label>
+                                  </div>
+                                  <div className="d-flex align-items-center gap-3">
+                                      <div className="d-flex align-items-center gap-2">
+                                      <Label className="mb-0" htmlFor={`open-${key}`}>Inicio</Label>
+                                      <Input id={`open-${key}`} type="time" value={d.open} disabled={!d.active} onChange={(e) => changeHour(key, "open", e.target.value)} />
+                                      </div>
+                                      <div className="d-flex align-items-center gap-2">
+                                      <Label className="mb-0" htmlFor={`close-${key}`}>Fin</Label>
+                                      <Input id={`close-${key}`} type="time" value={d.close} disabled={!d.active} onChange={(e) => changeHour(key, "close", e.target.value)} />
+                                      </div>
+                                      {isMonday && (
+                                      <Button type="button" size="sm" color="secondary" className="ms-2" onClick={applyMondayToAll}>
+                                          Aplicar a todos
+                                      </Button>
+                                      )}
+                                  </div>
+                                  </div>
+                              </div>
+                              );
+                          })}
+                          </>
+                      )}
+                      </div>
+                  </TabPane>
+                  </TabContent>
+              </Col>
+            )}
+          </Row>
+        </ModalBody>
+        <ModalFooter>
+          <Button color="secondary" onClick={onClose}>Cancelar</Button>
+          <Button color="primary" onClick={save} disabled={saving}>
+            {saving && <Spinner size="sm" className="me-2" />} Guardar
+          </Button>
+        </ModalFooter>
+      </Modal>
+    );
+  };
 /* =========================
-   Vista Personal (con paginación SIEMPRE visible)
+   Vista Principal (MODIFICADA)
 ========================= */
 const Personal: React.FC = () => {
   const tenantId = useMemo(() => decodeTenantId() || "", []);
   const [error, setError] = useState<string | null>(null);
-
-  // Carga cat/servicios (para modal)
   const [catLoading, setCatLoading] = useState(false);
   const [svcLoading, setSvcLoading] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [services, setServices] = useState<Service[]>([]);
-
-  // Staff
   const [staffLoading, setStaffLoading] = useState(false);
   const [staff, setStaff] = useState<Staff[]>([]);
   const [assignedByStaff, setAssignedByStaff] = useState<Record<string, AssignedSvc[]>>({});
-
-  // Modal
   const [stModalOpen, setStModalOpen] = useState(false);
   const [stEdit, setStEdit] = useState<Staff | null>(null);
-
-  // Paginación
   const PAGE_SIZE = 6;
   const [page, setPage] = useState<number>(1);
 
-  const totalPages = useMemo(() => {
-    return Math.max(1, Math.ceil(staff.length / PAGE_SIZE));
-  }, [staff.length]);
-
-  const paginatedStaff = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    const end = start + PAGE_SIZE;
-    return staff.slice(start, end);
-  }, [staff, page]);
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(staff.length / PAGE_SIZE)), [staff.length]);
+  const paginatedStaff = useMemo(() => staff.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [staff, page]);
 
   useEffect(() => {
-    if (page > totalPages) {
-      setPage(totalPages);
-    }
-    if (staff.length === 0) {
-      setPage(1);
-    }
-  }, [staff.length, totalPages]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (page > totalPages) setPage(totalPages);
+    if (staff.length === 0) setPage(1);
+  }, [staff.length, totalPages, page]);
 
   const loadCategories = async () => {
     setCatLoading(true);
@@ -793,29 +676,35 @@ const Personal: React.FC = () => {
   };
 
   const loadAssignedForStaff = async (list: Staff[]) => {
-    const entries: [string, AssignedSvc[]][] = await Promise.all(
-      list.map(async (u) => {
+    const stylists = list.filter(u => u.role_id === 3); 
+    if (stylists.length === 0) {
+        setAssignedByStaff({});
+        return;
+    }
+    const entries = await Promise.all(
+        stylists.map(async (u) => {
         try {
           const { data } = await api.get(`/stylists/${u.id}/services`);
-          const arr: AssignedSvc[] = Array.isArray(data) ? data : [];
-          return [u.id, arr] as [string, AssignedSvc[]];
+          return [u.id, Array.isArray(data) ? data : []] as [string, AssignedSvc[]];
         } catch {
           return [u.id, []] as [string, AssignedSvc[]];
         }
       })
     );
-    const map: Record<string, AssignedSvc[]> = {};
-    entries.forEach(([id, svcs]) => { map[id] = svcs; });
-    setAssignedByStaff(map);
+    setAssignedByStaff(Object.fromEntries(entries));
   };
-
+  
   const loadStaff = async () => {
     setStaffLoading(true);
     try {
-      const { data } = await api.get(`/users/tenant/${tenantId}`, { params: { role_id: 3 } as any });
-      const arr = Array.isArray(data) ? data : [];
-      setStaff(arr);
-      await loadAssignedForStaff(arr);
+      const { data } = await api.get(`/users/tenant/${tenantId}`, { params: { role_ids: '2,3' } });
+      const allStaff = Array.isArray(data) ? data : [];
+      
+      // --- MODIFICADO: Doble chequeo por si la API no filtra bien ---
+      const filteredStaff = allStaff.filter(user => user.role_id === 2 || user.role_id === 3);
+
+      setStaff(filteredStaff);
+      await loadAssignedForStaff(filteredStaff);
       setPage(1);
     } catch (e:any) {
       setError(e?.response?.data?.message || e?.message || 'No se pudo cargar el personal');
@@ -854,14 +743,11 @@ const Personal: React.FC = () => {
       end = totalPages;
       start = Math.max(1, end - windowSize + 1);
     }
-
     const items = [];
     for (let p = start; p <= end; p++) {
       items.push(
         <PaginationItem key={p} active={p === page}>
-          <PaginationLink onClick={() => setPage(p)}>
-            {p}
-          </PaginationLink>
+          <PaginationLink onClick={() => setPage(p)}>{p}</PaginationLink>
         </PaginationItem>
       );
     }
@@ -871,22 +757,21 @@ const Personal: React.FC = () => {
   return (
     <div>
       {error && <Alert color="danger" fade={false}>{error}</Alert>}
-
       <div className="d-flex justify-content-between align-items-center mb-3">
         <h5 className="mb-0">Personal</h5>
         <div className="d-flex align-items-center gap-2">
           {(staffLoading || catLoading || svcLoading) && <Spinner size="sm" />}
           <Button color="primary" onClick={openNewStaff}>
-            <i className="ri-add-line me-1" /> Nuevo estilista
+            <i className="ri-add-line me-1" /> Nuevo Personal
           </Button>
         </div>
       </div>
-
       <div className="table-responsive">
         <Table hover className="align-middle">
           <thead>
             <tr>
               <th>Nombre</th>
+              <th>Rol</th>
               <th>Email</th>
               <th>Teléfono</th>
               <th>Servicios que realiza</th>
@@ -895,7 +780,7 @@ const Personal: React.FC = () => {
           </thead>
           <tbody>
             {paginatedStaff.length === 0 && (
-              <tr><td colSpan={5} className="text-center text-muted">Sin personal</td></tr>
+              <tr><td colSpan={6} className="text-center text-muted">Sin personal</td></tr>
             )}
             {paginatedStaff.map(u => {
               const svcs = assignedByStaff[u.id] || [];
@@ -904,27 +789,27 @@ const Personal: React.FC = () => {
               return (
                 <tr key={u.id}>
                   <td className="fw-semibold">{u.first_name} {u.last_name || ""}</td>
+                  <td>
+                    {/* --- MODIFICADO: Eliminada la opción de "Otro" --- */}
+                    {u.role_id === 2 ? <Badge color="info">Cajero</Badge> : <Badge color="success">Estilista</Badge>}
+                  </td>
                   <td>{u.email || "—"}</td>
                   <td>{u.phone || "—"}</td>
                   <td>
-                    {show.length === 0 && <span className="text-muted">—</span>}
-                    {show.map(s => (
-                      <Badge key={s.id} pill color="light" className="text-dark me-1 mb-1">
-                        {s.name}
-                      </Badge>
-                    ))}
-                    {more > 0 && (
-                      <Badge pill color="soft-secondary" className="mb-1">+{more}</Badge>
+                    {u.role_id === 3 ? (
+                        <>
+                        {show.length === 0 && <span className="text-muted">—</span>}
+                        {show.map(s => <Badge key={s.id} pill color="light" className="text-dark me-1 mb-1">{s.name}</Badge>)}
+                        {more > 0 && <Badge pill color="soft-secondary" className="mb-1">+{more}</Badge>}
+                        </>
+                    ) : (
+                        <span className="text-muted">N/A</span>
                     )}
                   </td>
                   <td>
                     <div className="d-flex gap-2">
-                      <Button size="sm" color="soft-primary" onClick={() => openEditStaff(u)}>
-                        <i className="ri-edit-line" />
-                      </Button>
-                      <Button size="sm" color="soft-danger" onClick={() => deleteStaff(u)}>
-                        <i className="ri-delete-bin-line" />
-                      </Button>
+                      <Button size="sm" color="soft-primary" onClick={() => openEditStaff(u)}><i className="ri-edit-line" /></Button>
+                      <Button size="sm" color="soft-danger" onClick={() => deleteStaff(u)}><i className="ri-delete-bin-line" /></Button>
                     </div>
                   </td>
                 </tr>
@@ -936,21 +821,11 @@ const Personal: React.FC = () => {
 
       <div className="d-flex justify-content-end">
         <Pagination className="pagination-separated mb-0">
-          <PaginationItem disabled={page === 1}>
-            <PaginationLink first onClick={() => setPage(1)} />
-          </PaginationItem>
-          <PaginationItem disabled={page === 1}>
-            <PaginationLink previous onClick={() => setPage(p => Math.max(1, p - 1))} />
-          </PaginationItem>
-
+          <PaginationItem disabled={page === 1}><PaginationLink first onClick={() => setPage(1)} /></PaginationItem>
+          <PaginationItem disabled={page === 1}><PaginationLink previous onClick={() => setPage(p => Math.max(1, p - 1))} /></PaginationItem>
           {renderPageNumbers()}
-
-          <PaginationItem disabled={page === totalPages}>
-            <PaginationLink next onClick={() => setPage(p => Math.min(totalPages, p + 1))} />
-          </PaginationItem>
-          <PaginationItem disabled={page === totalPages}>
-            <PaginationLink last onClick={() => setPage(totalPages)} />
-          </PaginationItem>
+          <PaginationItem disabled={page === totalPages}><PaginationLink next onClick={() => setPage(p => Math.min(totalPages, p + 1))} /></PaginationItem>
+          <PaginationItem disabled={page === totalPages}><PaginationLink last onClick={() => setPage(totalPages)} /></PaginationItem>
         </Pagination>
       </div>
 
