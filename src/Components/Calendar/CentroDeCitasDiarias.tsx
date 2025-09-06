@@ -1,248 +1,270 @@
 // Archivo: src/Components/Calendar/CentroDeCitasDiarias.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Card,
-  CardBody,
-  Input,
-  Dropdown,
-  DropdownToggle,
-  DropdownMenu,
-  DropdownItem,
-  Modal,
-  ModalHeader,
-  ModalBody,
-  ModalFooter,
-  Button,
-  Nav,
-  NavItem,
-  NavLink,
-  TabContent,
-  TabPane,
-  Label,
-  Spinner
+  Card, CardBody, Input, Dropdown, DropdownToggle, DropdownMenu, DropdownItem,
+  Modal, ModalHeader, ModalBody, ModalFooter, Button, Nav, NavItem, NavLink,
+  TabContent, TabPane, Label, Spinner, Row, Col, Table
 } from "reactstrap";
 import classnames from "classnames";
 import SimpleBar from "simplebar-react";
 import Flatpickr from "react-flatpickr";
 import TarjetaCita from './TarjetaCita';
 import api from '../../services/api';
+import Swal from 'sweetalert2';
 
-// ================== Tipos ==================
-interface CentroDeCitasDiariasProps {
-  events: any[];
-  onNewAppointmentClick: () => void;
-}
-
+// ... (Tipos, Helpers y Modales `ModalAbrirCaja` y `ModalResumenCierre` sin cambios) ...
+interface CentroDeCitasDiariasProps { events: any[]; onNewAppointmentClick: () => void; }
 type CitaEvento = any;
-
-type GrupoCliente = {
-  clientId: string | number;
-  client_first_name: string;
-  client_last_name?: string;
-  earliestStartISO: string;
-  count: number;
-  appointments: {
-    id: string | number;
-    service_name: string;
-    stylist_first_name?: string;
-    start_time: string;
-  }[];
-};
-
-type Stylist = {
-  id: string | number;
-  first_name: string;
-  last_name?: string;
-};
-
-// ==== Helpers COP (sin decimales) ====
-const formatterCOP = new Intl.NumberFormat('es-CO', {
-  style: 'currency',
-  currency: 'COP',
-  maximumFractionDigits: 0,
-  minimumFractionDigits: 0
-});
+type GrupoCliente = { clientId: string | number; client_first_name: string; client_last_name?: string; earliestStartISO: string; count: number; appointments: { id: string | number; service_name: string; stylist_first_name?: string; start_time: string; }[]; };
+type Stylist = { id: string | number; first_name: string; last_name?: string; };
+const formatterCOP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0, minimumFractionDigits: 0 });
 const onlyDigits = (v: string) => (v || '').replace(/\D+/g, '');
 const formatCOPString = (digits: string) => {
-  if (!digits) return '';
-  const n = parseInt(digits, 10);
-  if (!Number.isFinite(n)) return '';
-  return formatterCOP.format(n);
+    if (!digits) return '';
+    const n = parseInt(digits, 10);
+    if (!Number.isFinite(n)) return '';
+    return formatterCOP.format(n);
+};
+const ModalAbrirCaja: React.FC<{ isOpen: boolean; onClose: () => void; onSessionOpened: () => void; }> = ({ isOpen, onClose, onSessionOpened }) => {
+    const [amountDigits, setAmountDigits] = useState('');
+    const [saving, setSaving] = useState(false);
+    const handleOpenSession = async () => {
+        const amount = parseInt(amountDigits || '0', 10) || 0;
+        try {
+            setSaving(true);
+            await api.post('/cash/open', { initial_amount: amount });
+            await Swal.fire('¡Caja Abierta!', 'La sesión de caja se ha iniciado correctamente.', 'success');
+            onSessionOpened();
+            onClose();
+        } catch (e: any) {
+            Swal.fire('Error', e?.response?.data?.error || 'No se pudo abrir la sesión de caja.', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
+    useEffect(() => { if (!isOpen) setAmountDigits(''); }, [isOpen]);
+    return (
+        <Modal isOpen={isOpen} toggle={onClose} centered>
+            <ModalHeader toggle={onClose}>Abrir Caja</ModalHeader>
+            <ModalBody>
+                <Label>Monto inicial en efectivo (base)</Label>
+                <Input type="text" inputMode="numeric" placeholder="$0" value={formatCOPString(amountDigits)} onChange={(e) => setAmountDigits(onlyDigits(e.target.value))} autoFocus />
+            </ModalBody>
+            <ModalFooter>
+                <Button color="secondary" onClick={onClose}>Cancelar</Button>
+                <Button color="primary" onClick={handleOpenSession} disabled={saving}>{saving && <Spinner size="sm" className="me-2" />}Confirmar Apertura</Button>
+            </ModalFooter>
+        </Modal>
+    );
+};
+const ModalResumenCierre: React.FC<{ isOpen: boolean; onClose: () => void; onSessionClosed: () => void; sessionData: any | null; }> = ({ isOpen, onClose, onSessionClosed, sessionData }) => {
+    const [saving, setSaving] = useState(false);
+    const summary = useMemo(() => {
+        const details = sessionData?.session_details || {};
+        const incomes = sessionData?.summary?.incomes_by_payment_method || [];
+        const expenses = sessionData?.summary?.expenses_by_category || [];
+        const totalCashIncomes = incomes.find((inc: any) => inc.payment_method === 'cash')?.total || 0;
+        const totalExpenses = expenses.reduce((acc: number, exp: any) => acc + Number(exp.total), 0);
+        return {
+            details, incomes, expenses,
+            attendedAppointments: sessionData?.summary?.attended_appointments_count || 0,
+            initialAmount: Number(details.initial_amount || 0),
+            totalCashIncomes: Number(totalCashIncomes),
+            totalExpenses: Number(totalExpenses),
+            expectedCash: sessionData?.expected_cash_amount || 0,
+        };
+    }, [sessionData]);
+    const handleCloseSession = async () => {
+        try {
+            setSaving(true);
+            await api.post('/cash/close', {});
+            await Swal.fire({ title: '¡Caja Cerrada!', text: 'La sesión de caja se ha cerrado y archivado correctamente.', icon: 'success' });
+            onSessionClosed();
+            onClose();
+        } catch (e: any) {
+            Swal.fire('Error', e?.response?.data?.error || 'No se pudo cerrar la sesión de caja.', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
+    if (!sessionData) return null;
+    return (
+        <Modal isOpen={isOpen} toggle={onClose} centered size="lg">
+            <ModalHeader toggle={onClose}>Resumen de Cierre de Caja</ModalHeader>
+            <ModalBody>
+                <Row>
+                    <Col md={6}>
+                        <p className='mb-1'><strong>Responsable:</strong> {summary.details.opener_name}</p>
+                        <p><strong>Apertura:</strong> {new Date(summary.details.opened_at).toLocaleString()}</p>
+                    </Col>
+                    <Col md={6} className="text-md-end">
+                        <p className="text-muted mb-0">Citas Atendidas</p>
+                        <h4 className="fw-bold">{summary.attendedAppointments}</h4>
+                    </Col>
+                </Row>
+                <hr />
+                <Row className="gy-3">
+                    <Col md={6}>
+                        <h6><i className="ri-arrow-down-circle-line text-success"></i> Ingresos Totales</h6>
+                        <div className="vstack gap-2">
+                            {summary.incomes.map((inc: any) => (
+                                <div key={inc.payment_method} className="d-flex justify-content-between">
+                                    <span>{inc.payment_method.charAt(0).toUpperCase() + inc.payment_method.slice(1)} ({inc.count})</span>
+                                    <span className="fw-medium">{formatterCOP.format(inc.total)}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </Col>
+                    <Col md={6}>
+                        <h6><i className="ri-arrow-up-circle-line text-danger"></i> Egresos en Efectivo</h6>
+                        <div className="vstack gap-2">
+                            {summary.expenses.length === 0 && <p className="text-muted m-0">No hubo egresos.</p>}
+                            {summary.expenses.map((exp: any) => (
+                                <div key={exp.category} className="d-flex justify-content-between">
+                                    <span>{exp.category === 'stylist_advance' ? 'Anticipos' : 'Facturas'} ({exp.count})</span>
+                                    <span className="fw-medium text-danger">{formatterCOP.format(exp.total)}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </Col>
+                </Row>
+                <hr />
+                <h6><i className="ri-cash-line"></i> Cuadre de Caja (Efectivo)</h6>
+                <div className="bg-light p-3 rounded">
+                    <div className="d-flex justify-content-between">
+                        <span className="text-muted">Base Inicial</span>
+                        <span>{formatterCOP.format(summary.initialAmount)}</span>
+                    </div>
+                    <div className="d-flex justify-content-between mt-2">
+                        <span className="text-muted">(+) Ingresos en Efectivo</span>
+                        <span className="text-success">{formatterCOP.format(summary.totalCashIncomes)}</span>
+                    </div>
+                    <div className="d-flex justify-content-between">
+                        <span className="text-muted">(-) Egresos en Efectivo</span>
+                        <span className="text-danger">{formatterCOP.format(summary.totalExpenses)}</span>
+                    </div>
+                    <hr className="my-2" />
+                    <div className="d-flex justify-content-between align-items-center">
+                        <strong className="fs-5">Total Efectivo Esperado</strong>
+                        <strong className="fs-3 text-primary">{formatterCOP.format(summary.expectedCash)}</strong>
+                    </div>
+                </div>
+            </ModalBody>
+            <ModalFooter>
+                <Button color="secondary" onClick={onClose}>Cancelar</Button>
+                <Button color="danger" onClick={handleCloseSession} disabled={saving}>{saving && <Spinner size="sm" className="me-2" />}Confirmar y Cerrar Caja</Button>
+            </ModalFooter>
+        </Modal>
+    );
 };
 
+
 const CentroDeCitasDiarias = ({ events, onNewAppointmentClick }: CentroDeCitasDiariasProps) => {
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [searchTerm, setSearchTerm] = useState<string>('');
-  const [dropdownOpen, setDropdownOpen] = useState<boolean>(false);
-  const [paymentsModalOpen, setPaymentsModalOpen] = useState<boolean>(false);
-
-  // Tabs del modal
-  const [activeTab, setActiveTab] = useState<'anticipo' | 'factura'>('anticipo');
-
-  // Formularios (guardamos solo dígitos en el monto)
-  const [anticipo, setAnticipo] = useState({ stylist_id: '', amountDigits: '', description: '' });
-  const [factura, setFactura] = useState({ reference: '', amountDigits: '', description: '' });
-
-  // Estilistas (GET /api/stylists)
-  const [stylists, setStylists] = useState<Stylist[]>([]);
-  const [loadingStylists, setLoadingStylists] = useState<boolean>(false);
-
-  const toggleDropdown = () => setDropdownOpen(!dropdownOpen);
-
-  // === Cargar estilistas activos del tenant ===
-  useEffect(() => {
-    let alive = true;
-    (async () => {
+    // ... (Estados sin cambios) ...
+    const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+    const [searchTerm, setSearchTerm] = useState<string>('');
+    const [dropdownOpen, setDropdownOpen] = useState<boolean>(false);
+    const [paymentsModalOpen, setPaymentsModalOpen] = useState<boolean>(false);
+    const [activeTab, setActiveTab] = useState<'anticipo' | 'factura'>('anticipo');
+    const [anticipo, setAnticipo] = useState({ stylist_id: '', amountDigits: '', description: '' });
+    const [factura, setFactura] = useState({ reference: '', amountDigits: '', description: '' });
+    const [stylists, setStylists] = useState<Stylist[]>([]);
+    const [loadingStylists, setLoadingStylists] = useState<boolean>(false);
+    const [cashSession, setCashSession] = useState<any | null>(null);
+    const [loadingSession, setLoadingSession] = useState<boolean>(true);
+    const [openModalOpen, setOpenModalOpen] = useState<boolean>(false);
+    const [closeModalOpen, setCloseModalOpen] = useState<boolean>(false);
+    
+    // ... (Funciones de lógica sin cambios) ...
+    const toggleDropdown = () => setDropdownOpen(!dropdownOpen);
+    const fetchCurrentSession = async () => {
+      let alive = true;
       try {
-        setLoadingStylists(true);
-        const { data } = await api.get('/stylists'); // ← nuevo endpoint root
-        if (!alive) return;
-        setStylists(Array.isArray(data) ? data : []);
+          setLoadingSession(true);
+          const { data } = await api.get('/cash/current');
+          if (alive) setCashSession(data);
       } catch (e) {
-        if (!alive) return;
-        console.error('Error cargando estilistas:', e);
-        setStylists([]);
+          console.error("Error cargando la sesión de caja", e);
+          if (alive) setCashSession(null);
       } finally {
-        if (alive) setLoadingStylists(false);
+          if (alive) setLoadingSession(false);
       }
-    })();
-    return () => { alive = false; };
-  }, []);
-
-  // Agrupar citas del día por cliente
-  const gruposPorCliente = useMemo<GrupoCliente[]>(() => {
-    const startOfDay = new Date(selectedDate);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(selectedDate);
-    endOfDay.setHours(23, 59, 59, 999);
-
-    const filtradas: CitaEvento[] = events.filter((event) => {
-      const fechaCita = new Date(event.start);
-      const enFecha = fechaCita >= startOfDay && fechaCita <= endOfDay;
-      const esOperativa =
-        event.extendedProps.status !== 'cancelled' &&
-        event.extendedProps.status !== 'completed';
-      if (!enFecha || !esOperativa) return false;
-
-      if (searchTerm) {
-        const q = searchTerm.toLowerCase();
-        return (
-          event.extendedProps.client_first_name?.toLowerCase().includes(q) ||
-          event.extendedProps.client_last_name?.toLowerCase().includes(q) ||
-          event.extendedProps.stylist_first_name?.toLowerCase().includes(q)
-        );
-      }
-      return true;
-    });
-
-    const map = new Map<string | number, GrupoCliente>();
-    for (const ev of filtradas) {
-      const ep = ev.extendedProps || {};
-      const clientId = ep.client_id ?? ep.clientId;
-      if (clientId == null) continue;
-
-      const item = {
-        id: ev.id,
-        service_name: ep.service_name,
-        stylist_first_name: ep.stylist_first_name,
-        start_time: ep.start_time ?? ev.start,
-      };
-
-      if (!map.has(clientId)) {
-        map.set(clientId, {
-          clientId,
-          client_first_name: ep.client_first_name,
-          client_last_name: ep.client_last_name,
-          earliestStartISO: item.start_time,
-          count: 1,
-          appointments: [item],
-        });
-      } else {
-        const g = map.get(clientId)!;
-        g.appointments.push(item);
-        g.count += 1;
-        if (new Date(item.start_time).getTime() < new Date(g.earliestStartISO).getTime()) {
-          g.earliestStartISO = item.start_time;
+      return () => { alive = false; };
+    };
+    useEffect(() => { fetchCurrentSession(); }, []);
+    useEffect(() => {
+      let alive = true;
+      (async () => {
+        try { setLoadingStylists(true); const { data } = await api.get('/stylists'); if (!alive) return; setStylists(Array.isArray(data) ? data : []); } catch (e) { if (!alive) return; console.error('Error cargando estilistas:', e); setStylists([]); } finally { if (alive) setLoadingStylists(false); }
+      })();
+      return () => { alive = false; };
+    }, []);
+    const gruposPorCliente = useMemo<GrupoCliente[]>(() => {
+      if (!cashSession) return []; // Si la caja está cerrada, no calculamos grupos.
+      const startOfDay = new Date(selectedDate); startOfDay.setHours(0, 0, 0, 0); const endOfDay = new Date(selectedDate); endOfDay.setHours(23, 59, 59, 999);
+      const filtradas: CitaEvento[] = events.filter((event) => {
+        const fechaCita = new Date(event.start); const enFecha = fechaCita >= startOfDay && fechaCita <= endOfDay;
+        const esOperativa = event.extendedProps.status !== 'cancelled' && event.extendedProps.status !== 'completed';
+        if (!enFecha || !esOperativa) return false;
+        if (searchTerm) {
+          const q = searchTerm.toLowerCase();
+          return ( event.extendedProps.client_first_name?.toLowerCase().includes(q) || event.extendedProps.client_last_name?.toLowerCase().includes(q) || event.extendedProps.stylist_first_name?.toLowerCase().includes(q) );
+        }
+        return true;
+      });
+      const map = new Map<string | number, GrupoCliente>();
+      for (const ev of filtradas) {
+        const ep = ev.extendedProps || {}; const clientId = ep.client_id ?? ep.clientId; if (clientId == null) continue;
+        const item = { id: ev.id, service_name: ep.service_name, stylist_first_name: ep.stylist_first_name, start_time: ep.start_time ?? ev.start, };
+        if (!map.has(clientId)) {
+          map.set(clientId, { clientId, client_first_name: ep.client_first_name, client_last_name: ep.client_last_name, earliestStartISO: item.start_time, count: 1, appointments: [item], });
+        } else {
+          const g = map.get(clientId)!; g.appointments.push(item); g.count += 1;
+          if (new Date(item.start_time).getTime() < new Date(g.earliestStartISO).getTime()) { g.earliestStartISO = item.start_time; }
         }
       }
-    }
-
-    return Array.from(map.values()).sort(
-      (a, b) => new Date(a.earliestStartISO).getTime() - new Date(b.earliestStartISO).getTime()
-    );
-  }, [events, selectedDate, searchTerm]);
-
-  // Abrir modal
-  const handleOpenPayments = () => {
-    setActiveTab('anticipo');
-    setPaymentsModalOpen(true);
-  };
-
-  // Guardar Anticipo -> POST /cash-movements
-  // Se registra como egreso (monto negativo en backend) y luego la nómina lo descuenta.
-  const handleSaveAnticipo = async () => {
-    const amount = parseInt(anticipo.amountDigits || '0', 10) || 0;
-    if (!anticipo.stylist_id || amount <= 0) {
-      alert('Selecciona estilista y un monto válido.');
-      return;
-    }
-    try {
-      await api.post('/cash-movements', {
-        type: 'payroll_advance',           // ← clave para nómina
-        category: 'stylist_advance',       // ← identifica que es anticipo de estilista
-        description: anticipo.description || 'Anticipo',
-        amount,                            // ← el controller lo pasa a negativo por ser advance
-        payment_method: 'cash',
-        related_entity_type: 'stylist',    // ← relaciona el anticipo con un estilista
-        related_entity_id: anticipo.stylist_id
-      });
-      alert('Anticipo registrado correctamente.');
-      setPaymentsModalOpen(false);
-      setAnticipo({ stylist_id: '', amountDigits: '', description: '' });
-    } catch (e: any) {
-      console.error(e);
-      alert(e?.response?.data?.error || 'Error al registrar el anticipo.');
-    }
-  };
-
-  // Guardar Factura -> POST /cash-movements
-  // Se registra como gasto (monto negativo en backend) y resta en caja/reportes.
-  const handleSaveFactura = async () => {
-    const amount = parseInt(factura.amountDigits || '0', 10) || 0;
-    if (!factura.reference || amount <= 0) {
-      alert('Ingresa referencia y un monto válido.');
-      return;
-    }
-    try {
-      await api.post('/cash-movements', {
-        type: 'expense',                   // ← egreso
-        category: 'vendor_invoice',        // ← gasto de proveedor
-        invoice_ref: factura.reference,    // ← referencia visible
-        description: factura.description || 'Factura',
-        amount,                            // ← el controller lo pasa a negativo por ser expense
-        payment_method: 'cash'
-      });
-      alert('Factura registrada correctamente.');
-      setPaymentsModalOpen(false);
-      setFactura({ reference: '', amountDigits: '', description: '' });
-    } catch (e: any) {
-      console.error(e);
-      alert(e?.response?.data?.error || 'Error al registrar la factura.');
-    }
-  };
+      return Array.from(map.values()).sort( (a, b) => new Date(a.earliestStartISO).getTime() - new Date(b.earliestStartISO).getTime() );
+    }, [events, selectedDate, searchTerm, cashSession]); // Depende de cashSession
+    const handleOpenPayments = () => { setActiveTab('anticipo'); setPaymentsModalOpen(true); };
+    const handleSaveAnticipo = async () => {
+      const amount = parseInt(anticipo.amountDigits || '0', 10) || 0;
+      if (!anticipo.stylist_id || amount <= 0) { Swal.fire('Datos incompletos', 'Selecciona un estilista y un monto válido.', 'warning'); return; }
+      try {
+        await api.post('/cash/movements', { type: 'payroll_advance', category: 'stylist_advance', description: anticipo.description || 'Anticipo', amount, payment_method: 'cash', related_entity_type: 'stylist', related_entity_id: anticipo.stylist_id });
+        Swal.fire('¡Éxito!', 'Anticipo registrado correctamente.', 'success');
+        setPaymentsModalOpen(false);
+        setAnticipo({ stylist_id: '', amountDigits: '', description: '' });
+        fetchCurrentSession();
+      } catch (e: any) { console.error(e); Swal.fire('Error', e?.response?.data?.error || 'No se pudo registrar el anticipo.', 'error'); }
+    };
+    const handleSaveFactura = async () => {
+      const amount = parseInt(factura.amountDigits || '0', 10) || 0;
+      if (!factura.reference || amount <= 0) { Swal.fire('Datos incompletos', 'Ingresa una referencia y un monto válido.', 'warning'); return; }
+      try {
+        await api.post('/cash/movements', { type: 'expense', category: 'vendor_invoice', invoice_ref: factura.reference, description: factura.description || 'Factura de proveedor', amount, payment_method: 'cash' });
+        Swal.fire('¡Éxito!', 'Factura registrada correctamente.', 'success');
+        setPaymentsModalOpen(false);
+        setFactura({ reference: '', amountDigits: '', description: '' });
+        fetchCurrentSession();
+      } catch (e: any) { console.error(e); Swal.fire('Error', e?.response?.data?.error || 'No se pudo registrar la factura.', 'error'); }
+    };
 
   return (
     <Card>
       <CardBody>
         <div className="d-flex justify-content-between align-items-center mb-3">
-          <h5 className="card-title mb-0">Cola de pagos</h5>
+          <h5 className="card-title mb-0">Operaciones del Día</h5>
           <Dropdown isOpen={dropdownOpen} toggle={toggleDropdown}>
-            <DropdownToggle color="light" caret>
-              Opciones
-            </DropdownToggle>
+            <DropdownToggle color="light" caret>Opciones</DropdownToggle>
             <DropdownMenu end>
-              <DropdownItem onClick={handleOpenPayments}>
+              {cashSession && (
+                <DropdownItem onClick={() => setCloseModalOpen(true)} disabled={loadingSession}>
+                    <i className="mdi mdi-door-closed me-2"></i> Cerrar Caja
+                </DropdownItem>
+              )}
+              <DropdownItem onClick={handleOpenPayments} disabled={!cashSession || loadingSession} title={!cashSession ? "Debes abrir la caja primero para registrar gastos" : ""}>
                 <i className="mdi mdi-cash me-2"></i> Anticipos / Facturas
+                {loadingSession && <Spinner size="sm" className='ms-2'/>}
               </DropdownItem>
               <DropdownItem onClick={onNewAppointmentClick}>
                 <i className="mdi mdi-plus me-2"></i> Crear Nueva Cita
@@ -251,182 +273,107 @@ const CentroDeCitasDiarias = ({ events, onNewAppointmentClick }: CentroDeCitasDi
           </Dropdown>
         </div>
 
-        <div className="mb-3">
-          <Flatpickr
-            className="form-control"
-            value={selectedDate}
-            onChange={([date]) => setSelectedDate(date)}
-            options={{ dateFormat: "Y-m-d", altInput: true, altFormat: "F j, Y" }}
-          />
-        </div>
-
-        <Input
-          type="text"
-          className="form-control"
-          placeholder="Buscar por cliente o estilista..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
+        {/* --- MODIFICADO: Contenido principal condicional --- */}
+        {loadingSession ? (
+            <div className='text-center p-5'><Spinner /></div>
+        ) : cashSession ? (
+            // Si la caja está ABIERTA, mostramos la interfaz de trabajo
+            <>
+                <div className="mb-3">
+                    <Flatpickr className="form-control" value={selectedDate} onChange={([date]) => setSelectedDate(date)} options={{ dateFormat: "Y-m-d", altInput: true, altFormat: "F j, Y" }} />
+                </div>
+                <Input type="text" className="form-control" placeholder="Buscar por cliente o estilista..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            </>
+        ) : (
+            // Si la caja está CERRADA, no mostramos nada aquí, el mensaje principal irá abajo.
+            null
+        )}
       </CardBody>
-
       <CardBody className="pt-0">
-        <SimpleBar style={{ maxHeight: "calc(100vh - 450px)" }}>
-          {gruposPorCliente.length > 0 ? (
-            gruposPorCliente.map((grupo) => (
-              <TarjetaCita key={grupo.clientId} group={grupo} />
-            ))
-          ) : (
-            <p className="text-muted text-center mt-4">No hay citas para mostrar.</p>
-          )}
-        </SimpleBar>
-      </CardBody>
-
-      {/* Modal Anticipos / Facturas */}
-      <Modal isOpen={paymentsModalOpen} toggle={() => setPaymentsModalOpen(false)} centered>
-        <ModalHeader toggle={() => setPaymentsModalOpen(false)}>
-          Anticipos / Facturas
-        </ModalHeader>
-        <ModalBody>
-          <Nav tabs>
-            <NavItem>
-              <NavLink
-                className={classnames({ active: activeTab === 'anticipo' })}
-                onClick={() => setActiveTab('anticipo')}
-                style={{ cursor: 'pointer' }}
-              >
-                Anticipo
-              </NavLink>
-            </NavItem>
-            <NavItem>
-              <NavLink
-                className={classnames({ active: activeTab === 'factura' })}
-                onClick={() => setActiveTab('factura')}
-                style={{ cursor: 'pointer' }}
-              >
-                Factura
-              </NavLink>
-            </NavItem>
-          </Nav>
-
-          <TabContent activeTab={activeTab} className="pt-3">
-            {/* TAB: ANTICIPO */}
-            <TabPane tabId="anticipo">
-              <div className="mb-3">
-                <Label className="form-label">Estilista</Label>
-                {loadingStylists ? (
-                  <div className="d-flex align-items-center gap-2">
-                    <Spinner size="sm" /> <span>Cargando estilistas…</span>
-                  </div>
+        {loadingSession ? (
+            null // No mostrar nada mientras carga
+        ) : cashSession ? (
+            // Si la caja está ABIERTA, mostramos la lista de citas
+            <SimpleBar style={{ maxHeight: "calc(100vh - 450px)" }}>
+                {gruposPorCliente.length > 0 ? (
+                    gruposPorCliente.map((grupo) => (
+                    <TarjetaCita key={grupo.clientId} group={grupo} />
+                    ))
                 ) : (
-                  <Input
-                    type="select"
-                    value={anticipo.stylist_id}
-                    onChange={(e) => setAnticipo(a => ({ ...a, stylist_id: e.target.value }))}
-                  >
-                    <option value="">Seleccione estilista</option>
-                    {stylists.map((s) => (
-                      <option key={s.id} value={String(s.id)}>
-                        {s.first_name} {s.last_name || ''}
-                      </option>
-                    ))}
-                  </Input>
+                    <p className="text-muted text-center mt-4">No hay citas pendientes para hoy.</p>
                 )}
-              </div>
-
-              <div className="mb-3">
-                <Label className="form-label">Monto</Label>
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="$0"
-                  value={formatCOPString(anticipo.amountDigits)}
-                  onChange={(e) => {
-                    const digits = onlyDigits(e.target.value);
-                    setAnticipo(a => ({ ...a, amountDigits: digits }));
-                  }}
-                />
-                {anticipo.amountDigits && (
-                  <small className="text-muted">Valor: {formatCOPString(anticipo.amountDigits)}</small>
-                )}
-              </div>
-
-              <div className="mb-0">
-                <Label className="form-label">Descripción</Label>
-                <Input
-                  type="textarea"
-                  rows={3}
-                  value={anticipo.description}
-                  onChange={(e) => setAnticipo(a => ({ ...a, description: e.target.value }))}
-                  placeholder="Motivo del anticipo"
-                />
-              </div>
-            </TabPane>
-
-            {/* TAB: FACTURA */}
-            <TabPane tabId="factura">
-              <div className="mb-3">
-                <Label className="form-label">Referencia de factura</Label>
-                <Input
-                  value={factura.reference}
-                  onChange={(e) => setFactura(f => ({ ...f, reference: e.target.value }))}
-                  placeholder="FAC-0001"
-                />
-              </div>
-
-              <div className="mb-3">
-                <Label className="form-label">Monto</Label>
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="$0"
-                  value={formatCOPString(factura.amountDigits)}
-                  onChange={(e) => {
-                    const digits = onlyDigits(e.target.value);
-                    setFactura(f => ({ ...f, amountDigits: digits }));
-                  }}
-                />
-                {factura.amountDigits && (
-                  <small className="text-muted">Valor: {formatCOPString(factura.amountDigits)}</small>
-                )}
-              </div>
-
-              <div className="mb-0">
-                <Label className="form-label">Descripción</Label>
-                <Input
-                  type="textarea"
-                  rows={3}
-                  value={factura.description}
-                  onChange={(e) => setFactura(f => ({ ...f, description: e.target.value }))}
-                  placeholder="Detalle de la compra"
-                />
-              </div>
-            </TabPane>
-          </TabContent>
+            </SimpleBar>
+        ) : (
+            // Si la caja está CERRADA, mostramos el botón para abrirla
+            <div className="text-center p-5">
+                <h4>La caja está cerrada</h4>
+                <p className="text-muted">Debes abrir la caja para ver la agenda del día y registrar operaciones.</p>
+                <Button color="success" size="lg" onClick={() => setOpenModalOpen(true)}>
+                    <i className="ri-door-open-line me-1"></i> Abrir Caja
+                </Button>
+            </div>
+        )}
+      </CardBody>
+      
+      {/* Modales */}
+      <Modal isOpen={paymentsModalOpen} toggle={() => setPaymentsModalOpen(false)} centered>
+        {/* ... (código del modal de pagos sin cambios) ... */}
+        <ModalHeader toggle={() => setPaymentsModalOpen(false)}>Anticipos / Facturas</ModalHeader>
+        <ModalBody>
+            <Nav tabs>
+                <NavItem><NavLink className={classnames({ active: activeTab === 'anticipo' })} onClick={() => setActiveTab('anticipo')} style={{ cursor: 'pointer' }}>Anticipo</NavLink></NavItem>
+                <NavItem><NavLink className={classnames({ active: activeTab === 'factura' })} onClick={() => setActiveTab('factura')} style={{ cursor: 'pointer' }}>Factura</NavLink></NavItem>
+            </Nav>
+            <TabContent activeTab={activeTab} className="pt-3">
+                <TabPane tabId="anticipo">
+                <div className="mb-3">
+                    <Label className="form-label">Estilista</Label>
+                    {loadingStylists ? ( <div className="d-flex align-items-center gap-2"><Spinner size="sm" /> <span>Cargando…</span></div> ) : (
+                    <Input type="select" value={anticipo.stylist_id} onChange={(e) => setAnticipo(a => ({ ...a, stylist_id: e.target.value }))}>
+                        <option value="">Seleccione estilista</option>
+                        {stylists.map((s) => ( <option key={s.id} value={String(s.id)}>{s.first_name} {s.last_name || ''}</option> ))}
+                    </Input>
+                    )}
+                </div>
+                <div className="mb-3">
+                    <Label className="form-label">Monto</Label>
+                    <Input type="text" inputMode="numeric" placeholder="$0" value={formatCOPString(anticipo.amountDigits)} onChange={(e) => { const digits = onlyDigits(e.target.value); setAnticipo(a => ({ ...a, amountDigits: digits })); }} />
+                    {anticipo.amountDigits && ( <small className="text-muted">Valor: {formatCOPString(anticipo.amountDigits)}</small> )}
+                </div>
+                <div className="mb-0">
+                    <Label className="form-label">Descripción</Label>
+                    <Input type="textarea" rows={3} value={anticipo.description} onChange={(e) => setAnticipo(a => ({ ...a, description: e.target.value }))} placeholder="Motivo del anticipo" />
+                </div>
+                </TabPane>
+                <TabPane tabId="factura">
+                <div className="mb-3">
+                    <Label className="form-label">Referencia de factura</Label>
+                    <Input value={factura.reference} onChange={(e) => setFactura(f => ({ ...f, reference: e.target.value }))} placeholder="FAC-0001" />
+                </div>
+                <div className="mb-3">
+                    <Label className="form-label">Monto</Label>
+                    <Input type="text" inputMode="numeric" placeholder="$0" value={formatCOPString(factura.amountDigits)} onChange={(e) => { const digits = onlyDigits(e.target.value); setFactura(f => ({ ...f, amountDigits: digits })); }} />
+                    {factura.amountDigits && ( <small className="text-muted">Valor: {formatCOPString(factura.amountDigits)}</small> )}
+                </div>
+                <div className="mb-0">
+                    <Label className="form-label">Descripción</Label>
+                    <Input type="textarea" rows={3} value={factura.description} onChange={(e) => setFactura(f => ({ ...f, description: e.target.value }))} placeholder="Detalle de la compra" />
+                </div>
+                </TabPane>
+            </TabContent>
         </ModalBody>
-
         <ModalFooter>
-          {activeTab === 'anticipo' ? (
-            <Button
-              color="primary"
-              onClick={handleSaveAnticipo}
-              disabled={!anticipo.stylist_id || !anticipo.amountDigits}
-            >
-              Guardar Anticipo
-            </Button>
-          ) : (
-            <Button
-              color="primary"
-              onClick={handleSaveFactura}
-              disabled={!factura.reference || !factura.amountDigits}
-            >
-              Guardar Factura
-            </Button>
-          )}
-          <Button color="secondary" onClick={() => setPaymentsModalOpen(false)}>
-            Cancelar
-          </Button>
+            {activeTab === 'anticipo' ? (
+                <Button color="primary" onClick={handleSaveAnticipo} disabled={!anticipo.stylist_id || !anticipo.amountDigits}>Guardar Anticipo</Button>
+            ) : (
+                <Button color="primary" onClick={handleSaveFactura} disabled={!factura.reference || !factura.amountDigits}>Guardar Factura</Button>
+            )}
+            <Button color="secondary" onClick={() => setPaymentsModalOpen(false)}>Cancelar</Button>
         </ModalFooter>
       </Modal>
+
+      <ModalAbrirCaja isOpen={openModalOpen} onClose={() => setOpenModalOpen(false)} onSessionOpened={fetchCurrentSession} />
+      <ModalResumenCierre isOpen={closeModalOpen} onClose={() => setCloseModalOpen(false)} onSessionClosed={fetchCurrentSession} sessionData={cashSession} />
     </Card>
   );
 };

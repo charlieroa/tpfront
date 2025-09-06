@@ -2,16 +2,14 @@
 import { jwtDecode } from "jwt-decode";
 
 export const TOKEN_KEY = "token";
-const LEGACY_TOKEN_KEY = "authToken";     // compatibilidad con código existente
-const AUTH_USER_KEY = "authUser";         // sesión del usuario (si la usas en sessionStorage)
+const LEGACY_TOKEN_KEY = "authToken";
+const AUTH_USER_KEY = "authUser";
 
 // =============================
 // Token helpers
 // =============================
 export const setToken = (token: string) => {
-  // clave oficial
   localStorage.setItem(TOKEN_KEY, token);
-  // espejo legacy por compatibilidad (puedes quitarlo cuando migres todo)
   localStorage.setItem(LEGACY_TOKEN_KEY, token);
 };
 
@@ -33,9 +31,11 @@ export type DecodedToken = {
     id?: string;
     tenant_id?: string;
     email?: string;
+    // --- NUEVO: Definimos explícitamente el rol para mayor claridad ---
+    role_id?: number; 
     [k: string]: any;
   };
-  tenant_id?: string; // algunos backends lo ponen en la raíz
+  tenant_id?: string;
   [k: string]: any;
 };
 
@@ -54,6 +54,13 @@ export const getTenantIdFromToken = (): string | null => {
   return dec?.user?.tenant_id || dec?.tenant_id || null;
 };
 
+// --- NUEVO: Función centralizada para obtener el rol del usuario ---
+export const getRoleFromToken = (): number | null => {
+  const dec = getDecodedToken();
+  return dec?.user?.role_id || null;
+};
+
+
 export const isTokenExpired = (): boolean => {
   const dec = getDecodedToken();
   if (!dec?.exp) return false;
@@ -62,7 +69,7 @@ export const isTokenExpired = (): boolean => {
 };
 
 // =============================
-// AuthUser helpers (opcional, si guardas datos de sesión)
+// AuthUser helpers
 // =============================
 export const setAuthUser = (user: any) => {
   sessionStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
