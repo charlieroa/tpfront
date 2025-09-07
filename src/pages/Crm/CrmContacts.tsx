@@ -1,10 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { isEmpty } from "lodash";
-
-// Import Images
-import avatar10 from "../../assets/images/users/avatar-10.jpg";
-
 import {
   Col,
   Container,
@@ -23,664 +18,364 @@ import {
   ModalBody,
   Form,
   ModalFooter,
+  FormFeedback,
+  Spinner,
   Table,
-  FormFeedback
+  InputGroup
 } from "reactstrap";
-import Select from "react-select";
+import { useSelector, useDispatch } from "react-redux";
+import { createSelector } from "reselect";
+import { useFormik } from "formik";
+import * as Yup from "yup";
+import { toast, ToastContainer } from 'react-toastify';
+import { unwrapResult } from '@reduxjs/toolkit';
 
+// Componentes comunes
 import BreadCrumb from "../../Components/Common/BreadCrumb";
 import DeleteModal from "../../Components/Common/DeleteModal";
-
-// Export Modal
-import ExportCSVModal from "../../Components/Common/ExportCSVModal";
-
-//Import actions (se conservan aunque no las usemos para listar)
-import {
-  getContacts as onGetContacts,
-  addNewContact as onAddNewContact,
-  updateContact as onUpdateContact,
-  deleteContact as onDeleteContact,
-} from "../../slices/thunks";
-//redux
-import { useSelector, useDispatch } from "react-redux";
 import TableContainer from "../../Components/Common/TableContainer";
-
-// Formik
-import * as Yup from "yup";
-import { useFormik } from "formik";
-
 import Loader from "../../Components/Common/Loader";
-import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { createSelector } from "reselect";
-
 import dummyImg from "../../assets/images/users/user-dummy-img.jpg";
 
+// Thunks reales del CRM
+import {
+  getContacts,
+  addNewContact,
+  updateContact,
+  deleteContact,
+} from "../../slices/crm/thunk";
+
+// Componente Principal
 const CrmContacts = () => {
   const dispatch: any = useDispatch();
-  const selectLayoutState = (state: any) => state.Crm;
-  const crmcontactData = createSelector(
-    selectLayoutState,
-    (state: any) => ({
-      crmcontacts: state.crmcontacts,
-      error: state.error,
+
+  // Selector de Redux para el estado real del CRM
+  const selectCrmState = createSelector(
+    (state: any) => state.Crm,
+    (crm) => ({
+      clients: crm.crmcontacts || [],
+      loading: crm.loading || false,
+      error: crm.error,
     })
   );
-  const { crmcontacts, error } = useSelector(crmcontactData);
+  const { clients, loading, error } = useSelector(selectCrmState);
 
-  // Datos fijos de Laura
-  const lauraData = useMemo(() => ([
-    {
-      id: "1",
-      img: avatar10,
-      name: "Laura cliente",
-      email: "laura@cliente.com",
-      phone: "3112244567",
-      tags: ["Corte hombre"], // Últimos servicios
-    }
-  ]), []);
-
-  useEffect(() => {
-    // Si tu app requiere cargar algo, mantenemos la llamada
-    if (crmcontacts && !crmcontacts.length) {
-      dispatch(onGetContacts());
-    }
-  }, [dispatch, crmcontacts]);
-
-  useEffect(() => {
-    setContact(crmcontacts);
-  }, [crmcontacts]);
-
-  useEffect(() => {
-    if (!isEmpty(crmcontacts)) {
-      setContact(crmcontacts);
-      setIsEdit(false);
-    }
-  }, [crmcontacts]);
-
+  // Estados locales del componente
   const [isEdit, setIsEdit] = useState<boolean>(false);
-  const [contact, setContact] = useState<any>([]);
-  const [info, setInfo] = useState<any>({});
-
-  // Seleccionar por defecto a Laura en el panel derecho
-  useEffect(() => {
-    if (lauraData?.length) setInfo(lauraData[0]);
-  }, [lauraData]);
-
-  // Modales / delete
-  const [deleteModal, setDeleteModal] = useState<boolean>(false);
-  const [deleteModalMulti, setDeleteModalMulti] = useState<boolean>(false);
+  const [contactToEdit, setContactToEdit] = useState<any>(null);
+  const [contactToDelete, setContactToDelete] = useState<any>(null);
+  const [info, setInfo] = useState<any>(null);
   const [modal, setModal] = useState<boolean>(false);
+  const [deleteModal, setDeleteModal] = useState<boolean>(false);
+  const [showPassword, setShowPassword] = useState<boolean>(false);
 
+  // Cargar los clientes al montar el componente
+  useEffect(() => {
+    dispatch(getContacts());
+  }, [dispatch]);
+
+  // Seleccionar el primer cliente para el panel derecho o limpiar si la lista cambia
+  useEffect(() => {
+    if (clients && clients.length > 0) {
+      const currentInfoExists = info && clients.some((c: any) => c.id === info.id);
+      if (!currentInfoExists) {
+        setInfo(clients[0]);
+      }
+    } else {
+      setInfo(null);
+    }
+  }, [clients, info]);
+
+  // Toggle para abrir/cerrar el modal
   const toggle = useCallback(() => {
     if (modal) {
       setModal(false);
-      setContact(null);
-      setSelectedImage('');
-      setImgStore('');
+      setContactToEdit(null);
+      setShowPassword(false);
     } else {
       setModal(true);
-      setTag([]);
-      setAssignTag([]);
     }
   }, [modal]);
 
-  const handleDeleteContact = () => {
-    if (contact) {
-      dispatch(onDeleteContact(contact.id));
-      setDeleteModal(false);
-    }
+  // Handler para el botón de "Agregar Cliente"
+  const handleAddClientClick = () => {
+    setIsEdit(false);
+    setContactToEdit(null);
+    validation.resetForm();
+    toggle();
   };
 
-  const onClickDelete = (c: any) => {
-    setContact(c);
-    setDeleteModal(true);
-  };
-
-  // Formik (se conserva para el modal de alta/edición si lo quieres usar)
-  const dateFormat = () => {
-    const d = new Date();
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    return (d.getDate() + ' ' + months[d.getMonth()] + ', ' + d.getFullYear());
-  };
-
-  const validation: any = useFormik({
-    enableReinitialize: true,
-    initialValues: {
-      id: (contact && contact.id) || '',
-      img: (contact && contact.img) || '',
-      name: (contact && contact.name) || '',
-      company: (contact && contact.company) || '',
-      designation: (contact && contact.designation) || '',
-      email: (contact && contact.email) || '',
-      phone: (contact && contact.phone) || '',
-      score: (contact && contact.score) || '',
-      tags: (contact && contact.tags) || [],
-    },
-    validationSchema: Yup.object({
-      name: Yup.string().required("Please Enter Name"),
-      img: Yup.string().required("Please Enter Image"),
-      company: Yup.string().required("Please Enter Company"),
-      designation: Yup.string().required("Please Enter Designation"),
-      email: Yup.string().required("Please Enter Email"),
-      phone: Yup.string().required("Please Enter Phone"),
-      score: Yup.string().required("Please Enter score"),
-    }),
-    onSubmit: (values) => {
-      if (isEdit) {
-        const updateContact = {
-          id: contact ? contact.id : 0,
-          img: values.img,
-          name: values.name,
-          company: values.company,
-          designation: values.designation,
-          email: values.email,
-          phone: values.phone,
-          score: values.score,
-          date: dateFormat(),
-          tags: assignTag,
-        };
-        dispatch(onUpdateContact(updateContact));
-        validation.resetForm();
-      } else {
-        const newContact = {
-          id: (Math.floor(Math.random() * (30 - 20)) + 20).toString(),
-          img: values["img"],
-          name: values["name"],
-          company: values["company"],
-          designation: values["designation"],
-          email: values["email"],
-          phone: values["phone"],
-          score: values["score"],
-          date: dateFormat(),
-          tags: assignTag,
-        };
-        dispatch(onAddNewContact(newContact));
-        validation.resetForm();
-      }
-      toggle();
-    },
-  });
-
-  const handleContactClick = useCallback((arg: any) => {
-    const c = arg;
-    setContact({
-      id: c.id,
-      img: c.img,
-      name: c.name,
-      company: c.company,
-      email: c.email,
-      designation: c.designation,
-      phone: c.phone,
-      score: c.score,
-      date: c.date,
-      tags: c.tags,
-    });
+  // Handler para el botón de "Editar"
+  const handleEditClick = useCallback((clientData: any) => {
     setIsEdit(true);
+    const nameParts = clientData.name.split(' ');
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ');
+
+    setContactToEdit({
+      id: clientData.id,
+      first_name: firstName,
+      last_name: lastName,
+      email: clientData.email,
+      phone: clientData.phone,
+    });
     toggle();
   }, [toggle]);
 
-  const handleRowClick = useCallback((rowData: any) => {
-    setInfo(rowData);
-  }, []);
+  // Handlers para la eliminación
+  const onClickDelete = (clientData: any) => {
+    setContactToDelete(clientData);
+    setDeleteModal(true);
+  };
 
-  // Checked All / Delete Multiple (se conserva)
-  const checkedAll = useCallback(() => {
-    const checkall: any = document.getElementById("checkBoxAll");
-    const ele = document.querySelectorAll(".contactCheckBox");
-    if (checkall?.checked) {
-      ele.forEach((e: any) => { e.checked = true; });
-    } else {
-      ele.forEach((e: any) => { e.checked = false; });
+  const handleDeleteContact = async () => {
+    if (contactToDelete && contactToDelete.id) {
+      try {
+        const resultAction = await dispatch(deleteContact(contactToDelete.id));
+        unwrapResult(resultAction);
+        toast.success("Cliente eliminado con éxito");
+        setDeleteModal(false);
+      } catch (err) {
+        toast.error("Error al eliminar el cliente");
+      }
     }
-    deleteCheckbox();
-  }, []);
-
-  const [selectedCheckBoxDelete, setSelectedCheckBoxDelete] = useState([] as any[]);
-  const [isMultiDeleteButton, setIsMultiDeleteButton] = useState<boolean>(false);
-
-  const deleteMultiple = () => {
-    const checkall: any = document.getElementById("checkBoxAll");
-    selectedCheckBoxDelete.forEach((element: any) => {
-      dispatch(onDeleteContact(element.value));
-      setTimeout(() => { toast.clearWaitingQueue(); }, 3000);
-    });
-    setIsMultiDeleteButton(false);
-    if (checkall) checkall.checked = false;
   };
 
-  const deleteCheckbox = () => {
-    const ele: any = document.querySelectorAll(".contactCheckBox:checked");
-    ele.length > 0 ? setIsMultiDeleteButton(true) : setIsMultiDeleteButton(false);
-    setSelectedCheckBoxDelete(ele);
-  };
+  // Formik para Clientes (Crear/Editar)
+  const validation = useFormik({
+    enableReinitialize: true,
+    initialValues: {
+      first_name: (contactToEdit && contactToEdit.first_name) || "",
+      last_name: (contactToEdit && contactToEdit.last_name) || "",
+      email: (contactToEdit && contactToEdit.email) || "",
+      phone: (contactToEdit && contactToEdit.phone) || "",
+      password: "",
+    },
+    validationSchema: Yup.object({
+      first_name: Yup.string().required("El nombre es obligatorio"),
+      email: Yup.string().email("Debe ser un email válido").required("El email es obligatorio"),
+      phone: Yup.string().optional(),
+      password: Yup.string().when('isEdit', {
+        is: false,
+        then: (schema) => schema.min(6, "La contraseña debe tener al menos 6 caracteres").required("La contraseña es obligatoria"),
+        otherwise: (schema) => schema.optional(),
+      }),
+    }),
+    onSubmit: async (values, { setSubmitting, resetForm }) => {
+      const clientData = {
+        first_name: values.first_name,
+        last_name: values.last_name,
+        email: values.email,
+        phone: values.phone,
+        ...(values.password && !isEdit && { password: values.password }),
+      };
 
-  // Columnas — ajustadas a tu pedido
+      try {
+        if (isEdit) {
+          const resultAction = await dispatch(updateContact({ id: contactToEdit.id, ...clientData }));
+          unwrapResult(resultAction);
+          toast.success("Cliente actualizado con éxito");
+        } else {
+          const resultAction = await dispatch(addNewContact(clientData));
+          unwrapResult(resultAction);
+          toast.success("Cliente creado con éxito");
+        }
+        resetForm();
+        toggle();
+      } catch (err: any) {
+        toast.error(err.error || "Ocurrió un error");
+      } finally {
+        setSubmitting(false);
+      }
+    },
+  });
+
+  // Columnas de la tabla
   const columns = useMemo(
     () => [
       {
-        header: <input type="checkbox" className="form-check-input" id="checkBoxAll" onClick={() => checkedAll()} />,
-        cell: (cell: any) => {
-          return <input type="checkbox" className="contactCheckBox form-check-input" value={cell.getValue()} onChange={() => deleteCheckbox()} />;
-        },
-        id: '#',
-        accessorKey: "id",
-        enableColumnFilter: false,
-        enableSorting: false,
-      },
-      {
-        header: "Name",
-        accessorKey: "name",
-        enableColumnFilter: false,
+        header: "Cliente", accessorKey: "name", enableColumnFilter: false,
         cell: (cell: any) => {
           const rowData = cell.row.original;
           return (
-            <div
-              className="d-flex align-items-center"
-              role="button"
-              tabIndex={0}
-              onClick={() => handleRowClick(rowData)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") handleRowClick(rowData);
-              }}
-              style={{ cursor: "pointer" }}
-            >
-              <div className="flex-shrink-0">
-                <img
-                  src={rowData.img || dummyImg}
-                  alt=""
-                  className="avatar-xs rounded-circle"
-                />
-              </div>
-              <div className="flex-grow-1 ms-2 name">
-                {cell.getValue()}
-              </div>
+            <div className="d-flex align-items-center" role="button" tabIndex={0} onClick={() => setInfo(rowData)} style={{ cursor: "pointer" }}>
+              <div className="flex-shrink-0"><img src={rowData.img || dummyImg} alt="" className="avatar-xs rounded-circle" /></div>
+              <div className="flex-grow-1 ms-2 name">{cell.getValue()}</div>
             </div>
           );
         },
       },
-      // ❌ Company eliminado
+      { header: "Email", accessorKey: "email", enableColumnFilter: false },
+      { header: "Teléfono", accessorKey: "phone", enableColumnFilter: false },
+      { header: "Total Servicios", accessorKey: "cantidadServicios", enableColumnFilter: false },
       {
-        header: "Email ID",
-        accessorKey: "email",
-        enableColumnFilter: false,
-      },
-      {
-        header: "Phone No",
-        accessorKey: "phone",
-        enableColumnFilter: false,
-      },
-      {
-        header: "Cantidad servicios",
-        accessorKey: "cantidadServicios",
-        enableColumnFilter: false,
-        cell: (cell: any) => {
-          const row = cell.row.original;
-          const count = Array.isArray(row.tags) ? row.tags.length : 0;
-          return <span>{count}</span>;
-        }
-      },
-      {
-        header: "Últimos servicios",
-        accessorKey: "tags",
-        enableColumnFilter: false,
+        header: "Últimos Servicios", accessorKey: "tags", enableColumnFilter: false,
         cell: (cell: any) => (
-          <>
+          <div className="d-flex flex-wrap gap-1">
             {(cell.getValue() || []).map((item: any, key: any) => (
-              <span className="badge bg-primary-subtle text-primary me-1" key={key}>{item}</span>
+              <span className="badge bg-primary-subtle text-primary" key={key}>{item}</span>
             ))}
-          </>
+          </div>
         ),
       },
-      // ❌ Last Contacted eliminado
       {
-        header: "Action",
-        cell: (cellProps: any) => {
-          return (
-            <ul className="list-inline hstack gap-2 mb-0">
-              <li className="list-inline-item edit" title="Call">
-                <Link to="#" className="text-muted d-inline-block">
-                  <i className="ri-phone-line fs-16"></i>
-                </Link>
-              </li>
-              <li className="list-inline-item edit" title="Message">
-                <Link to="#" className="text-muted d-inline-block">
-                  <i className="ri-question-answer-line fs-16"></i>
-                </Link>
-              </li>
-              <li className="list-inline-item">
-                <UncontrolledDropdown>
-                  <DropdownToggle
-                    href="#"
-                    className="btn btn-soft-primary btn-sm dropdown"
-                    tag="button"
-                  >
-                    <i className="ri-more-fill align-middle"></i>
-                  </DropdownToggle>
-                  <DropdownMenu className="dropdown-menu-end">
-                    <DropdownItem className="dropdown-item" href="#"
-                      onClick={() => { const contactData = cellProps.row.original; setInfo(contactData); }}
-                    >
-                      <i className="ri-eye-fill align-bottom me-2 text-muted"></i>{" "}
-                      View
-                    </DropdownItem>
-                    <DropdownItem
-                      className="dropdown-item edit-item-btn"
-                      href="#"
-                      onClick={() => { const contactData = cellProps.row.original; handleContactClick(contactData); }}
-                    >
-                      <i className="ri-pencil-fill align-bottom me-2 text-muted"></i>{" "}
-                      Edit
-                    </DropdownItem>
-                    <DropdownItem
-                      className="dropdown-item remove-item-btn"
-                      href="#"
-                      onClick={() => { const contactData = cellProps.row.original; onClickDelete(contactData); }}
-                    >
-                      <i className="ri-delete-bin-fill align-bottom me-2 text-muted"></i>{" "}
-                      Delete
-                    </DropdownItem>
-                  </DropdownMenu>
-                </UncontrolledDropdown>
-              </li>
-            </ul>
-          );
-        },
+        header: "Acciones",
+        cell: (cellProps: any) => (
+          <UncontrolledDropdown>
+            <DropdownToggle href="#" className="btn btn-soft-primary btn-sm dropdown" tag="button"><i className="ri-more-fill align-middle"></i></DropdownToggle>
+            <DropdownMenu className="dropdown-menu-end">
+              <DropdownItem onClick={() => setInfo(cellProps.row.original)}><i className="ri-eye-fill align-bottom me-2 text-muted"></i> Ver</DropdownItem>
+              <DropdownItem onClick={() => handleEditClick(cellProps.row.original)}><i className="ri-pencil-fill align-bottom me-2 text-muted"></i> Editar</DropdownItem>
+              <DropdownItem onClick={() => onClickDelete(cellProps.row.original)}><i className="ri-delete-bin-fill align-bottom me-2 text-muted"></i> Eliminar</DropdownItem>
+            </DropdownMenu>
+          </UncontrolledDropdown>
+        ),
       },
     ],
-    [handleContactClick, checkedAll, handleRowClick]
+    [handleEditClick]
   );
 
-  // Tags para el modal (si lo usas)
-  const [tag, setTag] = useState<any>();
-  const [assignTag, setAssignTag] = useState<any>([]);
-  const handlestag = (tags: any) => {
-    setTag(tags);
-    const assigned = tags.map((item: any) => item.value);
-    setAssignTag(assigned);
-  };
-  const tags = [
-    { label: "Exiting", value: "Exiting" },
-    { label: "Lead", value: "Lead" },
-    { label: "Long-term", value: "Long-term" },
-    { label: "Partner", value: "Partner" }
-  ];
-
-  // Imagen para el modal
-  const [imgStore, setImgStore] = useState<any>();
-  const [selectedImage, setSelectedImage] = useState<any>();
-  const handleClick = (item: any) => {
-    const newData = [...(imgStore || []), item];
-    setImgStore(newData);
-    validation.setFieldValue('img', newData);
-  };
-  useEffect(() => {
-    setImgStore((contact && contact.img) || []);
-  }, [contact]);
-  const handleImageChange = (event: any) => {
-    const file = event.target.files[0];
-    const reader = new FileReader();
-    reader.onload = (e: any) => {
-      validation.setFieldValue('img', e.target.result);
-      setSelectedImage(e.target.result);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  // Export
-  const [isExportCSV, setIsExportCSV] = useState<boolean>(false);
-
-  document.title = "Contacts | Velzon - React Admin & Dashboard Template";
+  document.title = "Clientes | CRM";
   return (
     <React.Fragment>
       <div className="page-content">
-        <ExportCSVModal
-          show={isExportCSV}
-          onCloseClick={() => setIsExportCSV(false)}
-          data={lauraData}
-        />
-        <DeleteModal
-          show={deleteModal}
-          onDeleteClick={handleDeleteContact}
-          onCloseClick={() => setDeleteModal(false)}
-        />
-        <DeleteModal
-          show={deleteModalMulti}
-          onDeleteClick={() => {
-            deleteMultiple();
-            setDeleteModalMulti(false);
-          }}
-          onCloseClick={() => setDeleteModalMulti(false)}
-        />
+        <DeleteModal show={deleteModal} onDeleteClick={handleDeleteContact} onCloseClick={() => setDeleteModal(false)} />
         <Container fluid>
-          <BreadCrumb title="Crm y campañas" pageTitle="CRM" />
+          <BreadCrumb title="Clientes" pageTitle="CRM" />
           <Row>
             <Col lg={12}>
               <Card>
                 <CardHeader>
                   <div className="d-flex align-items-center flex-wrap gap-2">
                     <div className="flex-grow-1">
-                      <button
-                        className="btn btn-primary add-btn"
-                        onClick={() => { setModal(true); }}
-                      >
-                        <i className="ri-add-fill me-1 align-bottom"></i> Agregar cliente
-                      </button>
-                    </div>
-                    <div className="flex-shrink-0">
-                      <div className="hstack text-nowrap gap-2">
-                        {isMultiDeleteButton && (
-                          <button className="btn btn-soft-danger" id="remove-actions"
-                            onClick={() => setDeleteModalMulti(true)}
-                          ><i className="ri-delete-bin-2-line"></i></button>
-                        )}
-                        <button className="btn btn-secondary">
-                          <i className="ri-filter-2-line me-1 align-bottom"></i> Filters
-                        </button>
-                        <button className="btn btn-soft-success" onClick={() => setIsExportCSV(true)}>Importar</button>
-
-                        <UncontrolledDropdown>
-                          <DropdownToggle
-                            href="#"
-                            className="btn btn-soft-info"
-                            tag="button"
-                          >
-                            <i className="ri-more-2-fill"></i>
-                          </DropdownToggle>
-                          <DropdownMenu className="dropdown-menu-end">
-                            <DropdownItem className="dropdown-item" href="#">All</DropdownItem>
-                            <DropdownItem className="dropdown-item" href="#">Last Week</DropdownItem>
-                            <DropdownItem className="dropdown-item" href="#">Last Month</DropdownItem>
-                            <DropdownItem className="dropdown-item" href="#">Last Year</DropdownItem>
-                          </DropdownMenu>
-                        </UncontrolledDropdown>
-                      </div>
+                      <button className="btn btn-primary add-btn" onClick={handleAddClientClick}><i className="ri-add-fill me-1 align-bottom"></i> Agregar cliente</button>
                     </div>
                   </div>
                 </CardHeader>
               </Card>
             </Col>
-
             <Col xxl={9}>
               <Card id="contactList">
                 <CardBody className="pt-0">
-                  <div>
-                    {lauraData && lauraData.length > 0 ? (
-                      <TableContainer
-                        columns={columns}
-                        data={lauraData}
-                        isGlobalFilter={true}
-                        customPageSize={8}
-                        divClass="table-responsive table-card mb-3"
-                        tableClass="align-middle table-nowrap"
-                        theadClass="table-light"
-                        isContactsFilter={true}
-                      />
-                    ) : (<Loader error={error} />)}
-                  </div>
-
-                  {/* Modal de alta/edición (opcional) */}
-                  <Modal id="showModal" isOpen={modal} toggle={toggle} centered>
-                    <ModalHeader className="bg-primary-subtle p-3" toggle={toggle}>
-                      {!!isEdit ? "Edit Contact" : "Add Contact"}
-                    </ModalHeader>
-                    <Form className="tablelist-form" onSubmit={(e) => {
-                      e.preventDefault();
-                      validation.handleSubmit();
-                      return false;
-                    }}>
-                      <ModalBody>
-                        <Input type="hidden" id="id-field" />
-                        <Row className="g-3">
-                          <Col lg={12}>
-                            <div className="text-center">
-                              <div className="position-relative d-inline-block">
-                                <div className="position-absolute bottom-0 end-0">
-                                  <Label htmlFor="customer-image-input" className="mb-0">
-                                    <div className="avatar-xs cursor-pointer">
-                                      <div className="avatar-title bg-light border rounded-circle text-muted">
-                                        <i className="ri-image-fill"></i>
-                                      </div>
-                                    </div>
-                                  </Label>
-                                  <Input className="form-control d-none" id="customer-image-input" type="file"
-                                    accept="image/png, image/gif, image/jpeg" onChange={handleImageChange}
-                                    invalid={validation.touched.img && validation.errors.img ? true : false}
-                                  />
-                                </div>
-                                <div className="avatar-lg p-1" onClick={(item: any) => handleClick(item)}>
-                                  <div className="avatar-title bg-light rounded-circle">
-                                    <img src={selectedImage || validation.values.img || dummyImg} alt="dummyImg" id="customer-img" className="avatar-md rounded-circle object-fit-cover" />
-                                  </div>
-                                </div>
-                              </div>
-                              {validation.errors.img && validation.touched.img ? (
-                                <FormFeedback type="invalid" className='d-block'> {validation.errors.img} </FormFeedback>
-                              ) : null}
-                            </div>
-
-                            <div>
-                              <Label htmlFor="name-field" className="form-label">Name</Label>
-                              <Input
-                                name="name"
-                                id="customername-field"
-                                className="form-control"
-                                placeholder="Enter Name"
-                                type="text"
-                                onChange={validation.handleChange}
-                                onBlur={validation.handleBlur}
-                                value={validation.values.name || ""}
-                                invalid={validation.touched.name && validation.errors.name ? true : false}
-                              />
-                              {validation.touched.name && validation.errors.name ? (
-                                <FormFeedback type="invalid">{validation.errors.name}</FormFeedback>
-                              ) : null}
-                            </div>
-                          </Col>
-                          {/* Resto de campos del modal… */}
-                        </Row>
-                      </ModalBody>
-                      <ModalFooter>
-                        <div className="hstack gap-2 justify-content-end">
-                          <button type="button" className="btn btn-light" onClick={() => { setModal(false); }} >Close</button>
-                          <button type="submit" className="btn btn-success" id="add-btn">{!!isEdit ? "Update" : "Add Contact"}</button>
-                        </div>
-                      </ModalFooter>
-                    </Form>
-                  </Modal>
-
-                  <ToastContainer closeButton={false} limit={1} />
+                  {loading && clients.length === 0 ? <Loader /> : (
+                    <TableContainer
+  columns={columns}
+  data={clients || []}
+  isGlobalFilter={true}
+  customPageSize={5}
+  // Se elimina la propiedad 'isPaginational' que causaba el error
+  divClass="table-responsive table-card mb-3"
+  tableClass="align-middle table-nowrap"
+  theadClass="table-light"
+/>
+                  )}
+                  {!loading && error && <div className="alert alert-danger mt-3">Error al cargar los clientes: {error.error || 'Error desconocido'}</div>}
                 </CardBody>
               </Card>
             </Col>
-
-            {/* Panel derecho — información de Laura */}
             <Col xxl={3}>
               <Card id="contact-view-detail">
-                <CardBody className="text-center">
-                  <div className="position-relative d-inline-block">
-                    <img
-                      src={info.img || avatar10}
-                      alt=""
-                      className="avatar-lg rounded-circle img-thumbnail"
-                    />
-                    <span className="contact-active position-absolute rounded-circle bg-success">
-                      <span className="visually-hidden"></span>
-                    </span>
-                  </div>
-                  <h5 className="mt-4 mb-1">{info.name || "Laura cliente"}</h5>
-                  {/* ❌ Company eliminado */}
-                  <ul className="list-inline mb-0">
-                    <li className="list-inline-item avatar-xs">
-                      <Link to="#" className="avatar-title bg-success-subtle text-success fs-15 rounded">
-                        <i className="ri-phone-line"></i>
-                      </Link>
-                    </li>
-                    <li className="list-inline-item avatar-xs">
-                      <Link to="#" className="avatar-title bg-danger-subtle text-danger fs-15 rounded">
-                        <i className="ri-mail-line"></i>
-                      </Link>
-                    </li>
-                    <li className="list-inline-item avatar-xs">
-                      <Link to="#" className="avatar-title bg-warning-subtle text-warning fs-15 rounded">
-                        <i className="ri-question-answer-line"></i>
-                      </Link>
-                    </li>
-                  </ul>
-                </CardBody>
-
-                <CardBody>
-                  <h6 className="text-muted text-uppercase fw-semibold mb-3">Información personal</h6>
-
-                  <div className="table-responsive table-card">
-                    <Table className="table table-borderless mb-0">
-                      <tbody>
-                        <tr>
-                          <td className="fw-medium">Email</td>
-                          <td>{info.email || "laura@cliente.com"}</td>
-                        </tr>
-                        <tr>
-                          <td className="fw-medium">Teléfono</td>
-                          <td>{info.phone || "3112244567"}</td>
-                        </tr>
-                        <tr>
-                          <td className="fw-medium">Últimos servicios</td>
-                          <td>
-                            {(info.tags || ["Corte hombre"]).map((item: any, key: any) => (
-                              <span className="badge bg-primary-subtle text-primary me-1" key={key}>{item}</span>
-                            ))}
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="fw-medium">Cantidad servicios</td>
-                          <td>{Array.isArray(info.tags) ? info.tags.length : 1}</td>
-                        </tr>
-                      </tbody>
-                    </Table>
-                  </div>
-
-                  <div className="d-flex gap-2 mt-3">
-                    <a
-                      href={`mailto:${info.email || "laura@cliente.com"}`}
-                      className="btn btn-danger btn-sm"
-                    >
-                      Enviar email
-                    </a>
-                    <a
-                      href={`https://wa.me/${(info.phone || "3112244567").replace(/\D/g, "").startsWith("57") ? (info.phone || "3112244567").replace(/\D/g, "") : "57" + (info.phone || "3112244567").replace(/\D/g, "")}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="btn btn-success btn-sm"
-                    >
-                      Enviar WhatsApp
-                    </a>
-                  </div>
-                </CardBody>
+                {info ? (
+                  <>
+                    <CardBody className="text-center">
+                      <div className="position-relative d-inline-block"><img src={info.img || dummyImg} alt="" className="avatar-lg rounded-circle img-thumbnail" /></div>
+                      <h5 className="mt-4 mb-1">{info.name}</h5>
+                    </CardBody>
+                    <CardBody>
+                      <h6 className="text-muted text-uppercase fw-semibold mb-3">Información personal</h6>
+                      <div className="table-responsive table-card">
+                        <Table className="table table-borderless mb-0">
+                          <tbody>
+                            <tr><td className="fw-medium">Email</td><td>{info.email || 'N/A'}</td></tr>
+                            <tr><td className="fw-medium">Teléfono</td><td>{info.phone || 'N/A'}</td></tr>
+                            <tr><td className="fw-medium">Total Servicios</td><td>{info.cantidadServicios}</td></tr>
+                            <tr>
+                              <td className="fw-medium">Últimos servicios</td>
+                              <td>
+                                {(info.tags && info.tags.length > 0) ? info.tags.map((item: any, key: any) => (
+                                  <span className="badge bg-primary-subtle text-primary me-1" key={key}>{item}</span>
+                                )) : 'Sin servicios registrados'}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </Table>
+                      </div>
+                    </CardBody>
+                  </>
+                ) : (
+                  <CardBody className="d-flex justify-content-center align-items-center" style={{minHeight: '400px'}}>
+                    <p>{loading ? 'Cargando...' : 'Seleccione un cliente o cree uno nuevo'}</p>
+                  </CardBody>
+                )}
               </Card>
             </Col>
           </Row>
         </Container>
       </div>
+
+      <Modal id="showModal" isOpen={modal} toggle={toggle} centered>
+        <ModalHeader className="bg-primary-subtle p-3" toggle={toggle}>
+            {isEdit ? `Editar Cliente: ${contactToEdit?.first_name || ''} ${contactToEdit?.last_name || ''}`.trim() : "Agregar Cliente"}
+        </ModalHeader>
+        <Form onSubmit={validation.handleSubmit}>
+          <ModalBody>
+            <Row className="g-3">
+              <Col md={6}>
+                <Label htmlFor="first_name-field">Nombre</Label>
+                <Input name="first_name" onChange={validation.handleChange} onBlur={validation.handleBlur} value={validation.values.first_name} invalid={!!(validation.touched.first_name && validation.errors.first_name)} />
+                {validation.touched.first_name && validation.errors.first_name && <FormFeedback>{validation.errors.first_name as string}</FormFeedback>}
+              </Col>
+              <Col md={6}>
+                <Label htmlFor="last_name-field">Apellido</Label>
+                <Input name="last_name" onChange={validation.handleChange} onBlur={validation.handleBlur} value={validation.values.last_name} />
+              </Col>
+              <Col md={12}>
+                <Label htmlFor="email-field">Email</Label>
+                <Input name="email" type="email" onChange={validation.handleChange} onBlur={validation.handleBlur} value={validation.values.email} invalid={!!(validation.touched.email && validation.errors.email)} />
+                {validation.touched.email && validation.errors.email && <FormFeedback>{validation.errors.email as string}</FormFeedback>}
+              </Col>
+              <Col md={12}>
+                <Label htmlFor="phone-field">Teléfono</Label>
+                <Input name="phone" onChange={validation.handleChange} onBlur={validation.handleBlur} value={validation.values.phone} />
+              </Col>
+              {!isEdit && (
+                <Col md={12}>
+                  <Label htmlFor="password-field">Contraseña</Label>
+                  <InputGroup>
+                    <Input 
+                      name="password" 
+                      type={showPassword ? "text" : "password"}
+                      onChange={validation.handleChange} 
+                      onBlur={validation.handleBlur} 
+                      value={validation.values.password} 
+                      invalid={!!(validation.touched.password && validation.errors.password)} 
+                    />
+                    <button 
+                      className="btn btn-light" 
+                      type="button" 
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      <i className={showPassword ? "ri-eye-off-fill" : "ri-eye-fill"}></i>
+                    </button>
+                    {validation.touched.password && validation.errors.password && <FormFeedback>{validation.errors.password as string}</FormFeedback>}
+                  </InputGroup>
+                </Col>
+              )}
+            </Row>
+          </ModalBody>
+          <ModalFooter>
+            <div className="hstack gap-2 justify-content-end">
+              <button type="button" className="btn btn-light" onClick={toggle}>Cerrar</button>
+              <button type="submit" className="btn btn-success" disabled={validation.isSubmitting}>
+                {validation.isSubmitting ? <Spinner size="sm" /> : (isEdit ? "Guardar Cambios" : "Agregar Cliente")}
+              </button>
+            </div>
+          </ModalFooter>
+        </Form>
+      </Modal>
+
+      <ToastContainer autoClose={3000} position="bottom-right" />
     </React.Fragment>
   );
 };
