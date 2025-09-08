@@ -10,6 +10,11 @@ import rootReducer from './slices';
 
 const store = configureStore({ reducer: rootReducer, devTools: true });
 
+// ¡NUEVO! Exportamos los tipos directamente desde el store.
+// Esta es la forma recomendada por Redux Toolkit.
+export type RootState = ReturnType<typeof store.getState>;
+export type AppDispatch = typeof store.dispatch;
+
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
 );
@@ -23,7 +28,4 @@ root.render(
   </Provider>
 );
 
-// If you want to start measuring performance in your app, pass a function
-// to log results (for example: reportWebVitals(console.log))
-// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
 reportWebVitals();

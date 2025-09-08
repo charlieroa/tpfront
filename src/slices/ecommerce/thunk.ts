@@ -2,161 +2,173 @@ import { createAsyncThunk } from "@reduxjs/toolkit";
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-//Include Both Helper File with needed methods
 import {
-  getProducts as getProductsApi,
-  deleteProducts as deleteProductsApi,
-  getOrders as getOrdersApi,
-  getSellers as getSellersApi,
-  getCustomers as getCustomersApi,
-  updateOrder as updateOrderApi,
-  deleteOrder as deleteOrderApi,
-  addNewOrder as addNewOrderApi,
-  addNewCustomer as addNewCustomerApi,
-  updateCustomer as updateCustomerApi,
-  deleteCustomer as deleteCustomerApi,
-  addNewProduct as addNewProductApi,
-  updateProduct as updateProductApi
+    getProducts as getProductsApi,
+    deleteProducts as deleteProductsApi,
+    getOrders as getOrdersApi,
+    getSellers as getSellersApi,
+    getCustomers as getCustomersApi,
+    updateOrder as updateOrderApi,
+    deleteOrder as deleteOrderApi,
+    addNewOrder as addNewOrderApi,
+    addNewCustomer as addNewCustomerApi,
+    updateCustomer as updateCustomerApi,
+    deleteCustomer as deleteCustomerApi,
+    addNewProduct as addNewProductApi,
+    updateProduct as updateProductApi
 } from "../../helpers/fakebackend_helper";
 
-export const getProducts = createAsyncThunk("ecommerce/getProducts", async () => {
-  try {
-    const response = getProductsApi();
-    return response;
-  } catch (error) {
-    return error;
-  }
+// Interfaces para tipado
+interface Product { id: string | number; [key: string]: any; }
+interface Order { id: string | number; [key: string]: any; }
+interface Customer { id: string | number; [key: string]: any; }
+interface Seller { id: string | number; [key: string]: any; }
+
+
+// --- Thunks para Productos ---
+
+export const getProducts = createAsyncThunk<Product[]>("ecommerce/getProducts", async (_, { rejectWithValue }) => {
+    try {
+        const response = await getProductsApi();
+        return response.data; // <-- ¡CORRECCIÓN CLAVE AQUÍ!
+    } catch (error: any) {
+        return rejectWithValue(error.response.data || "Error al obtener productos");
+    }
 });
 
-export const getOrders = createAsyncThunk("ecommerce/getOrders", async () => {
-  try {
-    const response = getOrdersApi();
-    return response;
-  } catch (error) {
-    return error;
-  }
+export const addNewProduct = createAsyncThunk<Product, Product>("ecommerce/addNewProduct", async (product, { rejectWithValue }) => {
+    try {
+        const response = await addNewProductApi(product);
+        toast.success("Producto añadido con éxito", { autoClose: 3000 });
+        return response.data; // <-- ¡CORRECCIÓN CLAVE AQUÍ!
+    } catch (error: any) {
+        toast.error("Falló al añadir el producto", { autoClose: 3000 });
+        return rejectWithValue(error.response.data || "Error al añadir producto");
+    }
 });
 
-export const getSellers = createAsyncThunk("ecommerce/getSellers", async () => {
-  try {
-    const response = getSellersApi();
-    return response;
-  } catch (error) {
-    return error;
-  }
+export const updateProduct = createAsyncThunk<Product, Product>("ecommerce/updateProduct", async (product, { rejectWithValue }) => {
+    try {
+        const response = await updateProductApi(product);
+        toast.success("Producto actualizado con éxito", { autoClose: 3000 });
+        return response.data; // <-- ¡CORRECCIÓN CLAVE AQUÍ!
+    } catch (error: any) {
+        toast.error("Falló al actualizar el producto", { autoClose: 3000 });
+        return rejectWithValue(error.response.data || "Error al actualizar producto");
+    }
 });
 
-export const getCustomers = createAsyncThunk("ecommerce/getCustomers", async () => {
-  try {
-    const response = getCustomersApi();
-    return response;
-  } catch (error) {
-    return error;
-  }
+export const deleteProducts = createAsyncThunk<{ product: Product }, Product>("ecommerce/deleteProducts", async (product, { rejectWithValue }) => {
+    try {
+        await deleteProductsApi(product);
+        toast.success("Producto eliminado con éxito", { autoClose: 3000 });
+        // Este se queda igual porque el reducer lo espera así
+        return { product };
+    } catch (error: any) {
+        toast.error("Falló al eliminar el producto", { autoClose: 3000 });
+        return rejectWithValue(error.response.data || "Error al eliminar producto");
+    }
 });
 
-export const deleteProducts = createAsyncThunk("ecommerce/deleteProducts", async (product : any) => {
-  try {
-    const response = deleteProductsApi(product);
-    toast.success("Product Delete Successfully", { autoClose: 3000 });
-    return { product, ...response };
-  } catch (error) {
-    toast.error("Product Delete Failed", { autoClose: 3000 });
-    return error;
-  }
+
+// --- Thunks para Órdenes ---
+
+export const getOrders = createAsyncThunk<Order[]>("ecommerce/getOrders", async (_, { rejectWithValue }) => {
+    try {
+        const response = await getOrdersApi();
+        return response.data; // <-- ¡CORRECCIÓN CLAVE AQUÍ!
+    } catch (error: any) {
+        return rejectWithValue(error.response.data || "Error al obtener órdenes");
+    }
 });
 
-export const updateOrder = createAsyncThunk("ecommerce/updateOrder", async (order : any) => {
-  try {
-    const response = updateOrderApi(order);
-    const data = await response;
-    toast.success("Order Updateded Successfully", { autoClose: 3000 });
-    return data;
-  } catch (error) {
-    toast.error("Order Updateded Failed", { autoClose: 3000 });
-    return error;
-  }
+export const addNewOrder = createAsyncThunk<Order, Order>("ecommerce/addNewOrder", async (order, { rejectWithValue }) => {
+    try {
+        const response = await addNewOrderApi(order);
+        toast.success("Orden añadida con éxito", { autoClose: 3000 });
+        return response.data; // <-- ¡CORRECCIÓN CLAVE AQUÍ!
+    } catch (error: any) {
+        toast.error("Falló al añadir la orden", { autoClose: 3000 });
+        return rejectWithValue(error.response.data || "Error al añadir orden");
+    }
 });
 
-export const addNewProduct = createAsyncThunk("ecommerce/addNewProduct", async (product : any) => {
-  try {
-    const response = addNewProductApi(product);
-    const data = await response;
-    toast.success("Product Added Successfully", { autoClose: 3000 });
-    return data;
-  } catch (error) {
-    toast.error("Product Added Failed", { autoClose: 3000 });
-    return error;
-  }
+export const updateOrder = createAsyncThunk<Order, Order>("ecommerce/updateOrder", async (order, { rejectWithValue }) => {
+    try {
+        const response = await updateOrderApi(order);
+        toast.success("Orden actualizada con éxito", { autoClose: 3000 });
+        return response.data; // <-- ¡CORRECCIÓN CLAVE AQUÍ!
+    } catch (error: any) {
+        toast.error("Falló al actualizar la orden", { autoClose: 3000 });
+        return rejectWithValue(error.response.data || "Error al actualizar orden");
+    }
 });
 
-export const updateProduct = createAsyncThunk("ecommerce/updateProduct", async (product : any) => {
-  try {
-    const response = updateProductApi(product);
-    const data = await response;
-    toast.success("Product Updateded Successfully", { autoClose: 3000 });
-    return data;
-  }
-  catch (error) {
-    toast.error("Product Updateded Failed", { autoClose: 3000 });
-    return error;
-  }
+export const deleteOrder = createAsyncThunk<{ order: Order }, Order>("ecommerce/deleteOrder", async (order, { rejectWithValue }) => {
+    try {
+        await deleteOrderApi(order);
+        toast.success("Orden eliminada con éxito", { autoClose: 3000 });
+        return { order };
+    } catch (error: any) {
+        toast.error("Falló al eliminar la orden", { autoClose: 3000 });
+        return rejectWithValue(error.response.data || "Error al eliminar orden");
+    }
 });
 
-export const deleteOrder = createAsyncThunk("ecommerce/deleteOrder", async (order : any) => {
-  try {
-    const response = deleteOrderApi(order);
-    toast.success("Order Deleted Successfully", { autoClose: 3000 });
-    return { order, ...response };
-  } catch (error) {
-    toast.error("Order Deleted Failed", { autoClose: 3000 });
-    return error;
-  }
+
+// --- Thunks para Clientes ---
+
+export const getCustomers = createAsyncThunk<Customer[]>("ecommerce/getCustomers", async (_, { rejectWithValue }) => {
+    try {
+        const response = await getCustomersApi();
+        return response.data; // <-- ¡CORRECCIÓN CLAVE AQUÍ!
+    } catch (error: any) {
+        return rejectWithValue(error.response.data || "Error al obtener clientes");
+    }
 });
 
-export const addNewOrder = createAsyncThunk("ecommerce/addNewOrder", async (order : any) => {
-  try {
-    const response = addNewOrderApi(order);
-    const data = await response;
-    toast.success("Order Added Successfully", { autoClose: 3000 });
-    return data;
-  } catch (error) {
-    toast.error("Order Added Failed", { autoClose: 3000 });
-    return error;
-  }
+export const addNewCustomer = createAsyncThunk<Customer, Customer>("ecommerce/addNewCustomer", async (customer, { rejectWithValue }) => {
+    try {
+        const response = await addNewCustomerApi(customer);
+        toast.success("Cliente añadido con éxito", { autoClose: 3000 });
+        return response.data; // <-- ¡CORRECCIÓN CLAVE AQUÍ!
+    } catch (error: any) {
+        toast.error("Falló al añadir el cliente", { autoClose: 3000 });
+        return rejectWithValue(error.response.data || "Error al añadir cliente");
+    }
 });
 
-export const updateCustomer = createAsyncThunk("ecommerce/updateCustomer", async (customer : any) => {
-  try {
-    const response = updateCustomerApi(customer);
-    const data = await response;
-    toast.success("Customer Updateded Successfully", { autoClose: 3000 });
-    return data;
-  } catch (error) {
-    toast.error("Customer Updateded Failed", { autoClose: 3000 });
-    return error;
-  }
+export const updateCustomer = createAsyncThunk<Customer, Customer>("ecommerce/updateCustomer", async (customer, { rejectWithValue }) => {
+    try {
+        const response = await updateCustomerApi(customer);
+        toast.success("Cliente actualizado con éxito", { autoClose: 3000 });
+        return response.data; // <-- ¡CORRECCIÓN CLAVE AQUÍ!
+    } catch (error: any) {
+        toast.error("Falló al actualizar el cliente", { autoClose: 3000 });
+        return rejectWithValue(error.response.data || "Error al actualizar cliente");
+    }
 });
 
-export const deleteCustomer = createAsyncThunk("ecommerce/deleteCustomer", async (customer : any) => {
-  try {
-    const response = deleteCustomerApi(customer);
-    toast.success("Customer Deleted Successfully", { autoClose: 3000 });
-    return { customer, ...response }
-  } catch (error) {
-    toast.error("Customer Deleted Failed", { autoClose: 3000 });
-    return error;
-  }
+export const deleteCustomer = createAsyncThunk<{ customer: Customer }, Customer>("ecommerce/deleteCustomer", async (customer, { rejectWithValue }) => {
+    try {
+        await deleteCustomerApi(customer);
+        toast.success("Cliente eliminado con éxito", { autoClose: 3000 });
+        return { customer };
+    } catch (error: any) {
+        toast.error("Falló al eliminar el cliente", { autoClose: 3000 });
+        return rejectWithValue(error.response.data || "Error al eliminar cliente");
+    }
 });
 
-export const addNewCustomer = createAsyncThunk("ecommerce/addNewCustomer", async (customer : any) => {
-  try {
-    const response = addNewCustomerApi(customer);
-    const data = await response;
-    toast.success("Customer Added Successfully", { autoClose: 3000 });
-    return data;
-  } catch (error) {
-    toast.error("Customer Added Failed", { autoClose: 3000 });
-    return error;
-  }
+
+// --- Thunk para Vendedores ---
+
+export const getSellers = createAsyncThunk<Seller[]>("ecommerce/getSellers", async (_, { rejectWithValue }) => {
+    try {
+        const response = await getSellersApi();
+        return response.data; // <-- ¡CORRECCIÓN CLAVE AQUÍ!
+    } catch (error: any) {
+        toast.error("Error al obtener vendedores", { autoClose: 3000 });
+        return rejectWithValue(error.response.data || "Error al obtener vendedores");
+    }
 });

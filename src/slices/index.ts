@@ -7,17 +7,20 @@ import LayoutReducer from "./layouts/reducer";
 
 // Authentication
 import LoginReducer from "./auth/login/reducer";
-import AccountReducer from "./auth/register/reducer"; // Este es para el registro de CLIENTES
+import AccountReducer from "./auth/register/reducer";
 import ForgetPasswordReducer from "./auth/forgetpwd/reducer";
 import ProfileReducer from "./auth/profile/reducer";
-import tenantRegisterReducer from "./auth/tenantRegister/reducer"; // <-- 1. IMPORTAMOS NUESTRO NUEVO REDUCER
+import tenantRegisterReducer from "./auth/tenantRegister/reducer";
 
 //Calendar
 import CalendarReducer from "./calendar/reducer";
 //Chat
 import chatReducer from "./chat/reducer";
-//Ecommerce
+//Ecommerce (del template)
 import EcommerceReducer from "./ecommerce/reducer";
+
+// ¡NUEVO! Slice para nuestros productos reales
+import ProductsReducer from './products/slice';
 
 //Project
 import ProjectsReducer from "./projects/reducer";
@@ -78,11 +81,13 @@ const rootReducer = combineReducers({
     Account: AccountReducer,
     ForgetPassword: ForgetPasswordReducer,
     Profile: ProfileReducer,
-    tenantRegister: tenantRegisterReducer, // <-- 2. AÑADIMOS EL REDUCER A LA TIENDA
+    tenantRegister: tenantRegisterReducer,
     Calendar: CalendarReducer,
     Chat: chatReducer,
     Projects: ProjectsReducer,
     Ecommerce: EcommerceReducer,
+    // ¡NUEVO! Añadimos el estado de productos a la tienda global
+    products: ProductsReducer,
     Tasks: TasksReducer,
     Crypto: CryptoReducer,
     Tickets: TicketsReducer,

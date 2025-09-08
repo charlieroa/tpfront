@@ -1,538 +1,287 @@
-// src/pages/Apps/Ecommerce/Products/BeautyProductsTabsDummy.tsx
+// Ubicación: src/pages/Ecommerce/EcommerceProducts/index.tsx
+
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Container,
-  UncontrolledDropdown,
-  DropdownToggle,
-  DropdownItem,
-  DropdownMenu,
-  Nav,
-  NavItem,
-  NavLink,
-  UncontrolledCollapse,
-  Row,
-  Card,
-  CardHeader,
-  Col,
-  Modal,
-  ModalHeader,
-  ModalBody,
-  ModalFooter,
-  Button,
-  Form,
-  Label,
-  Input,
+    Container, UncontrolledDropdown, DropdownToggle, DropdownItem, DropdownMenu,
+    Nav, NavItem, NavLink, Row, Card, CardHeader, Col,
+    Modal, ModalHeader, ModalBody, ModalFooter, Button, Form, Label, Input, Spinner
 } from "reactstrap";
 import classnames from "classnames";
 import Nouislider from "nouislider-react";
 import "nouislider/distribute/nouislider.css";
 
+// Redux
+import { useSelector, useDispatch } from "react-redux";
+import { createNewProduct, deleteExistingProduct, fetchProductCategories, fetchProducts, updateExistingProduct, uploadProductImage } from "../../../slices/products/thunk";
+import { Product } from "../../../services/productApi";
+import { AppDispatch, RootState } from "../../../index";
+
 import BreadCrumb from "../../../Components/Common/BreadCrumb";
 import TableContainer from "../../../Components/Common/TableContainer";
 
-// Celdas simples
-const PriceCell = ({ cell }: any) => {
-  const val = cell.getValue();
-  return <span>{typeof val === "string" ? val : `$${val}`}</span>;
-};
-const RatingCell = () => <span></span>; // rating vacío
-const PublishedCell = ({ cell }: any) => <span className="text-muted">{cell.getValue()}</span>;
+// ¡SOLUCIÓN! Define la URL de tu backend aquí. Es una buena práctica usar variables de entorno.
+const BACKEND_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
-// Datos base (dummy)
-const INITIAL_PRODUCTS = [
-  {
-    id: "B-1001",
-    name: "Keratina Pro Liss 500ml",
-    category: "Beauty",
-    stock: 10,
-    price: "$79.900",
-    orders: 18,
-    rating: "",
-    publishedDate: "2025-09-01",
-    image:
-      "https://images.unsplash.com/photo-1580618672591-eb180b1a973f?q=80&w=800&auto=format&fit=crop",
-    status: "published",
-  },
-  {
-    id: "B-1002",
-    name: "Serum Capilar Argan 100ml",
-    category: "Beauty",
-    stock: 15,
-    price: "$39.900",
-    orders: 27,
-    rating: "",
-    publishedDate: "2025-09-01",
-    image:
-      "https://images.unsplash.com/photo-1601004890684-d8cbf643f5f2?q=80&w=800&auto=format&fit=crop",
-    status: "published",
-  },
-];
+// Tipos para el formulario y filtros
+type TabKey = "all" | "cliente" | "estilista";
 
-type TabKey = "all" | "reventa" | "personal";
+// ===================================================================
+// COMPONENTE PRINCIPAL
+// ===================================================================
+const ProductsPage = () => {
+    // 1. CONEXIÓN CON REDUX
+    const dispatch: AppDispatch = useDispatch();
+    const {
+        products: allProducts,
+        categories,
+        status,
+        error
+    } = useSelector((state: RootState) => state.products);
 
-const BeautyProductsTabsDummy = () => {
-  // Estado maestro
-  const [allProducts, setAllProducts] = useState<any[]>(INITIAL_PRODUCTS);
+    // 2. ESTADO LOCAL PARA LA UI (filtros y modales)
+    const [activeTab, setActiveTab] = useState<TabKey>("all");
+    const [activeCategory, setActiveCategory] = useState<string>("all");
+    const [priceRange, setPriceRange] = useState([0, 500000]);
+    const [modalOpen, setModalOpen] = useState(false);
+    const [isEditMode, setIsEditMode] = useState(false);
+    const [formData, setFormData] = useState<Partial<Product>>({});
+    const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+    const [imagePreview, setImagePreview] = useState<string | null>(null);
+    const [confirmDeleteModal, setConfirmDeleteModal] = useState(false);
+    const [productToDelete, setProductToDelete] = useState<Product | null>(null);
 
-  // Estado de UI
-  const [activeTab, setActiveTab] = useState<TabKey>("all");
-  const [productList, setProductList] = useState<any[]>(INITIAL_PRODUCTS);
+    // 3. OBTENER DATOS REALES AL CARGAR EL COMPONENTE
+    useEffect(() => {
+        dispatch(fetchProducts());
+        dispatch(fetchProductCategories());
+    }, [dispatch]);
 
-  const [cate, setCate] = useState("all");
-  const [mincost, setMincost] = useState(0);
-  const [maxcost, setMaxcost] = useState(100);
+    // 4. LÓGICA DE FILTRADO (MEMOIZED PARA EFICIENCIA)
+    const filteredProducts = useMemo(() => {
+        let filtered = [...allProducts];
+        if (activeTab !== "all") {
+            filtered = filtered.filter(p => p.audience_type === activeTab || p.audience_type === 'ambos');
+        }
+        if (activeCategory !== "all") {
+            filtered = filtered.filter(p => p.category_id === activeCategory);
+        }
+        filtered = filtered.filter(p => p.sale_price >= priceRange[0] && p.sale_price <= priceRange[1]);
+        return filtered;
+    }, [allProducts, activeTab, activeCategory, priceRange]);
 
-  // Modal Agregar producto
-  const [addOpen, setAddOpen] = useState(false);
-  const [newProd, setNewProd] = useState({
-    name: "",
-    price: "",
-    stock: "",
-    category: "Beauty",
-    publishedDate: "2025-09-01",
-  });
-  const [newImageFile, setNewImageFile] = useState<File | null>(null);
-  const [newImagePreview, setNewImagePreview] = useState<string | null>(null);
-
-  useEffect(() => {
-    document.getElementById("product-price-range")?.setAttribute("data-slider-color", "success");
-  }, []);
-
-  // Helpers de pestañas
-  const computeBaseForTab = (tab: TabKey, source: any[] = allProducts) => {
-    if (tab === "reventa") return source.slice(0, 1);
-    if (tab === "personal") return source.slice(1, 2);
-    return source; // all
-  };
-  const applyTabFilter = (tab: TabKey, source: any[] = allProducts) => {
-    setProductList(computeBaseForTab(tab, source));
-  };
-  const toggleTab = (tab: TabKey) => {
-    if (activeTab !== tab) {
-      setActiveTab(tab);
-      setCate("all");
-      setMincost(0);
-      setMaxcost(100);
-      applyTabFilter(tab);
-    }
-  };
-
-  // Filtros laterales (dummy)
-  const categories = (category: string) => {
-    setCate(category);
-    const base = computeBaseForTab(activeTab);
-    setProductList(category === "all" ? base : base.filter((p) => p.category === category));
-  };
-  const onUpDate = (value: any) => {
-    setMincost(value[0]);
-    setMaxcost(value[1]);
-    const base = computeBaseForTab(activeTab);
-    const byCategory = cate === "all" ? base : base.filter((p) => p.category === cate);
-    setProductList(byCategory); // solo visual; no filtramos por precio porque son strings
-  };
-  const onChangeRating = () => {
-    const base = computeBaseForTab(activeTab);
-    const byCategory = cate === "all" ? base : base.filter((p) => p.category === cate);
-    setProductList(byCategory); // rating vacío; no filtra
-  };
-  const onUncheckMark = () => {
-    const base = computeBaseForTab(activeTab);
-    const byCategory = cate === "all" ? base : base.filter((p) => p.category === cate);
-    setProductList(byCategory);
-  };
-
-  // Modal: carga de foto y submit
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] ?? null;
-    setNewImageFile(file);
-    setNewImagePreview(file ? URL.createObjectURL(file) : null);
-  };
-  const resetAddForm = () => {
-    setNewProd({
-      name: "",
-      price: "",
-      stock: "",
-      category: "Beauty",
-      publishedDate: "2025-09-01",
-    });
-    if (newImagePreview) URL.revokeObjectURL(newImagePreview);
-    setNewImageFile(null);
-    setNewImagePreview(null);
-  };
-  const handleAddProduct = (e: React.FormEvent) => {
-    e.preventDefault();
-    const created = {
-      id: `B-${Math.floor(Math.random() * 9000) + 1000}`,
-      name: newProd.name || "Nuevo producto",
-      category: newProd.category || "Beauty",
-      stock: newProd.stock ? Number(newProd.stock) : 0,
-      price: newProd.price || "$0",
-      orders: 0,
-      rating: "",
-      publishedDate: newProd.publishedDate || "2025-09-01",
-      image:
-        newImagePreview ||
-        "https://images.unsplash.com/photo-1580618672591-eb180b1a973f?q=80&w=800&auto=format&fit=crop",
-      status: "published",
+    // 5. MANEJADORES DE ACCIONES (CRUD)
+    const handleAddClick = () => {
+        setIsEditMode(false);
+        setFormData({ audience_type: 'cliente', cost_price: 0, sale_price: 0, staff_price: 0, stock: 0 });
+        setImagePreview(null);
+        setSelectedImageFile(null);
+        setModalOpen(true);
     };
-    const updatedAll = [...allProducts, created];
-    setAllProducts(updatedAll);
-    const base = computeBaseForTab(activeTab, updatedAll);
-    const byCategory = cate === "all" ? base : base.filter((p) => p.category === cate);
-    setProductList(byCategory);
-    setAddOpen(false);
-    resetAddForm();
-  };
 
-  // Columnas
-  const columns = useMemo(
-    () => [
-      {
-        header: "Product",
-        accessorKey: "name",
-        enableColumnFilter: false,
-        cell: (cell: any) => (
-          <div className="d-flex align-items-center">
-            <div className="flex-shrink-0 me-3">
-              <div className="avatar-sm bg-light rounded p-1">
-                <img src={cell.row.original.image} alt="" className="img-fluid d-block" />
-              </div>
-            </div>
-            <div className="flex-grow-1">
-              <h5 className="fs-14 mb-1">
-                <a href="#" className="text-body" onClick={(e) => e.preventDefault()}>
-                  {cell.getValue()}
-                </a>
-              </h5>
-              <p className="text-muted mb-0">
-                Category : <span className="fw-medium">{cell.row.original.category}</span>
-              </p>
-            </div>
-          </div>
-        ),
-      },
-      { header: "Stock", accessorKey: "stock", enableColumnFilter: false },
-      { header: "Price", accessorKey: "price", enableColumnFilter: false, cell: (c: any) => <PriceCell {...c} /> },
-      { header: "Orders", accessorKey: "orders", enableColumnFilter: false },
-      { header: "Rating", accessorKey: "rating", enableColumnFilter: false, cell: () => <RatingCell /> },
-      { header: "Published", accessorKey: "publishedDate", enableColumnFilter: false, cell: (c: any) => <PublishedCell {...c} /> },
-      {
-        header: "Action",
-        cell: () => (
-          <UncontrolledDropdown>
-            <DropdownToggle href="#" className="btn btn-soft-secondary btn-sm" tag="button">
-              <i className="ri-more-fill" />
-            </DropdownToggle>
-            <DropdownMenu className="dropdown-menu-end">
-              <DropdownItem href="#" onClick={(e) => e.preventDefault()}>
-                <i className="ri-eye-fill align-bottom me-2 text-muted"></i> View
-              </DropdownItem>
-              <DropdownItem href="#" onClick={(e) => e.preventDefault()}>
-                <i className="ri-pencil-fill align-bottom me-2 text-muted"></i> Edit
-              </DropdownItem>
-              <DropdownItem divider />
-              <DropdownItem href="#" onClick={(e) => e.preventDefault()}>
-                <i className="ri-delete-bin-fill align-bottom me-2 text-muted"></i> Delete
-              </DropdownItem>
-            </DropdownMenu>
-          </UncontrolledDropdown>
-        ),
-      },
-    ],
-    []
-  );
+    const handleEditClick = (product: Product) => {
+        setIsEditMode(true);
+        setFormData(product);
+        // Usamos BACKEND_URL también aquí para la vista previa en modo edición
+        setImagePreview(product.image_url ? `${BACKEND_URL}${product.image_url}` : null);
+        setSelectedImageFile(null);
+        setModalOpen(true);
+    };
 
-  document.title = "Products (All / Reventa / Personal) | Velzon - React Admin & Dashboard";
+    const handleDeleteClick = (product: Product) => {
+        setProductToDelete(product);
+        setConfirmDeleteModal(true);
+    };
 
-  return (
-    <div className="page-content">
-      <Container fluid>
-        <BreadCrumb title="Products" pageTitle="Ecommerce" />
+    const confirmDelete = () => {
+        if (productToDelete) {
+            dispatch(deleteExistingProduct(productToDelete.id));
+            setConfirmDeleteModal(false);
+            setProductToDelete(null);
+        }
+    };
 
-        <Row>
-          {/* Sidebar filtros */}
-          <Col xl={3} lg={4}>
-            <Card>
-              <CardHeader>
-                <div className="d-flex mb-3">
-                  <div className="flex-grow-1">
-                    <h5 className="fs-16">Filters</h5>
-                  </div>
-                  <div className="flex-shrink-0">
-                    <a
-                      href="#"
-                      className="text-decoration-underline"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setMincost(0);
-                        setMaxcost(100);
-                        setCate("all");
-                        applyTabFilter(activeTab);
-                      }}
-                    >
-                      Clear All
-                    </a>
-                  </div>
-                </div>
-              </CardHeader>
+    const handleFormSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (isEditMode && formData.id) {
+            const productDataToUpdate: Partial<Product> = { ...formData };
+            delete productDataToUpdate.id;
+            
+            if (selectedImageFile) {
+                await dispatch(uploadProductImage({ id: formData.id, imageFile: selectedImageFile }));
+            }
+            dispatch(updateExistingProduct({ id: formData.id, productData: productDataToUpdate }));
+        } else {
+            const productData: Omit<Product, 'id' | 'image_url'> = {
+                name: formData.name!,
+                description: formData.description,
+                cost_price: Number(formData.cost_price || 0),
+                sale_price: Number(formData.sale_price || 0),
+                staff_price: Number(formData.staff_price || 0),
+                stock: Number(formData.stock || 0),
+                category_id: formData.category_id,
+                audience_type: formData.audience_type!,
+            };
+            dispatch(createNewProduct({ productData, imageFile: selectedImageFile || undefined }));
+        }
+        setModalOpen(false);
+        resetFormAndImage();
+    };
 
-              <div className="accordion accordion-flush">
-                <div className="card-body border-bottom">
-                  <p className="text-muted text-uppercase fs-12 fw-medium mb-2">Products</p>
-                  <ul className="list-unstyled mb-0 filter-list">
-                    <li>
-                      <a
-                        href="#"
-                        className={cate === "Beauty" ? "active d-flex py-1 align-items-center" : "d-flex py-1 align-items-center"}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          categories("Beauty");
-                        }}
-                      >
-                        <div className="flex-grow-1">
-                          <h5 className="fs-13 mb-0 listname">Beauty</h5>
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0] ?? null;
+        setSelectedImageFile(file);
+        setImagePreview(file ? URL.createObjectURL(file) : null);
+    };
+
+    const resetFormAndImage = () => {
+        setFormData({ audience_type: 'cliente' });
+        setSelectedImageFile(null);
+        if (imagePreview) {
+            URL.revokeObjectURL(imagePreview);
+        }
+        setImagePreview(null);
+    };
+
+    // Columnas de la tabla
+    const columns = useMemo(() => [
+        {
+            header: "Producto", accessorKey: "name", enableColumnFilter: false,
+            cell: (cell: any) => (
+                <div className="d-flex align-items-center">
+                    <div className="flex-shrink-0 me-3">
+                        <div className="avatar-sm bg-light rounded p-1">
+                            {/* ¡LA LÍNEA CLAVE! Usamos BACKEND_URL para construir la ruta completa a la imagen */}
+                            <img 
+                                src={cell.row.original.image_url ? `${BACKEND_URL}${cell.row.original.image_url}` : "https://www.shutterstock.com/image-vector/default-ui-image-placeholder-wireframes-600nw-1037719192.jpg"} 
+                                alt={cell.getValue()} 
+                                className="img-fluid d-block" 
+                                style={{height: "100%", objectFit: "cover"}} 
+                                onError={(e) => { e.currentTarget.src = "https://www.shutterstock.com/image-vector/default-ui-image-placeholder-wireframes-600nw-1037719192.jpg"; }}
+                            />
                         </div>
-                      </a>
-                    </li>
-                    <li>
-                      <a
-                        href="#"
-                        className={cate === "all" ? "active d-flex py-1 align-items-center" : "d-flex py-1 align-items-center"}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          categories("all");
-                        }}
-                      >
-                        <div className="flex-grow-1">
-                          <h5 className="fs-13 mb-0 listname">All</h5>
-                        </div>
-                      </a>
-                    </li>
-                  </ul>
+                    </div>
+                    <div className="flex-grow-1">
+                        <h5 className="fs-14 mb-1">{cell.getValue()}</h5>
+                        <p className="text-muted mb-0">Categoría: <span className="fw-medium">{cell.row.original.category_name || 'N/A'}</span></p>
+                    </div>
                 </div>
+            ),
+        },
+        { header: "Stock", accessorKey: "stock", enableColumnFilter: false },
+        { header: "Precio Venta", accessorKey: "sale_price", enableColumnFilter: false, cell: ({ cell }: any) => <span>${new Intl.NumberFormat('es-CO').format(cell.getValue())}</span> },
+        { header: "Audiencia", accessorKey: "audience_type", enableColumnFilter: false },
+        {
+            header: "Acción", enableColumnFilter: false,
+            cell: ({ row }: any) => (
+                <UncontrolledDropdown>
+                    <DropdownToggle href="#" className="btn btn-soft-secondary btn-sm" tag="button"><i className="ri-more-fill" /></DropdownToggle>
+                    <DropdownMenu className="dropdown-menu-end">
+                        <DropdownItem onClick={() => handleEditClick(row.original)}><i className="ri-pencil-fill align-bottom me-2 text-muted" /> Editar</DropdownItem>
+                        <DropdownItem onClick={() => handleDeleteClick(row.original)}><i className="ri-delete-bin-fill align-bottom me-2 text-muted" /> Eliminar</DropdownItem>
+                    </DropdownMenu>
+                </UncontrolledDropdown>
+            ),
+        },
+    ], [BACKEND_URL]); // <-- Añadimos BACKEND_URL a las dependencias del useMemo
 
-                <div className="card-body border-bottom">
-                  <p className="text-muted text-uppercase fs-12 fw-medium mb-4">Price</p>
-                  <Nouislider
-                    range={{ min: 0, max: 100 }}
-                    start={[mincost, maxcost]}
-                    connect
-                    onSlide={onUpDate}
-                    id="product-price-range"
-                  />
-                  <div className="formCost d-flex gap-2 align-items-center mt-3">
-                    <input className="form-control form-control-sm" type="text" value={`$ ${mincost}`} readOnly />
-                    <span className="fw-semibold text-muted">to</span>
-                    <input className="form-control form-control-sm" type="text" value={`$ ${maxcost}`} readOnly />
-                  </div>
-                </div>
+    document.title = "Inventario de Productos | StyleApp";
 
-                <div className="accordion-item">
-                  <h2 className="accordion-header">
-                    <button className="accordion-button bg-transparent shadow-none" type="button" id="flush-headingRating">
-                      <span className="text-muted text-uppercase fs-12 fw-medium">Rating</span>{" "}
-                      <span className="badge bg-success rounded-pill align-middle ms-1">{allProducts.length}</span>
-                    </button>
-                  </h2>
-                  <UncontrolledCollapse toggler="#flush-headingRating" defaultOpen>
-                    <div className="accordion-collapse collapse show">
-                      <div className="accordion-body text-body">
-                        <div className="d-flex flex-column gap-2">
-                          {[5, 4, 3, 2, 1].map((r) => (
-                            <div className="form-check" key={r}>
-                              <input
-                                className="form-check-input"
-                                type="checkbox"
-                                id={`productratingRadio${r}`}
-                                onChange={(e) => (e.target.checked ? onChangeRating() : onUncheckMark())}
-                              />
-                              <label className="form-check-label" htmlFor={`productratingRadio${r}`}>
-                                <span className="text-muted">
-                                  {Array.from({ length: 5 }).map((_, i) => (
-                                    <i key={i} className={`mdi mdi-star${i < r ? " text-warning" : ""}`} />
-                                  ))}
-                                </span>{" "}
-                                {r} & Above
-                              </label>
+    return (
+        <div className="page-content">
+            <Container fluid>
+                <BreadCrumb title="Productos" pageTitle="Inventario" />
+                <Row>
+                    {/* Sidebar */}
+                    <Col xl={3} lg={4}>
+                        <Card>
+                             <CardHeader><h5 className="fs-16">Filtros</h5></CardHeader>
+                             <div className="card-body border-bottom">
+                                <p className="text-muted text-uppercase fs-12 fw-medium mb-2">Categorías</p>
+                                <ul className="list-unstyled mb-0 filter-list">
+                                    <li><a href="#!" className={activeCategory === 'all' ? 'active' : ''} onClick={() => setActiveCategory("all")}>Todos</a></li>
+                                    {categories.map((cat) => (
+                                        <li key={cat.id}><a href="#!" className={activeCategory === cat.id ? 'active' : ''} onClick={() => setActiveCategory(cat.id)}>{cat.name}</a></li>
+                                    ))}
+                                </ul>
+                             </div>
+                             <div className="card-body border-bottom">
+                                <p className="text-muted text-uppercase fs-12 fw-medium mb-4">Precio</p>
+                                <Nouislider range={{ min: 0, max: 500000 }} start={priceRange} connect step={1000} onSlide={(values) => setPriceRange(values.map(Number))} id="product-price-range" />
+                                <div className="formCost d-flex gap-2 align-items-center mt-3"><span className="fw-semibold text-muted">${new Intl.NumberFormat('es-CO').format(priceRange[0])} a ${new Intl.NumberFormat('es-CO').format(priceRange[1])}</span></div>
+                             </div>
+                        </Card>
+                    </Col>
+
+                    {/* Contenido Principal */}
+                    <Col xl={9} lg={8}>
+                        <Card>
+                            <div className="card-header border-0">
+                                <Row className="align-items-center g-2">
+                                    <Col>
+                                        <Nav className="nav-tabs-custom card-header-tabs border-bottom-0" role="tablist">
+                                            <NavItem><NavLink className={classnames({ active: activeTab === 'all' })} onClick={() => setActiveTab('all')} href="#">Todos</NavLink></NavItem>
+                                            <NavItem><NavLink className={classnames({ active: activeTab === 'cliente' })} onClick={() => setActiveTab('cliente')} href="#">Venta a Clientes</NavLink></NavItem>
+                                            <NavItem><NavLink className={classnames({ active: activeTab === 'estilista' })} onClick={() => setActiveTab('estilista')} href="#">Uso Personal</NavLink></NavItem>
+                                        </Nav>
+                                    </Col>
+                                    <Col className="text-end"><Button color="primary" onClick={handleAddClick}><i className="ri-add-line align-middle me-1" /> Agregar Producto</Button></Col>
+                                </Row>
                             </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </UncontrolledCollapse>
-                </div>
-              </div>
-            </Card>
-          </Col>
-
-          {/* Contenido principal */}
-          <Col xl={9} lg={8}>
-            <Card>
-              <div className="card-header border-0">
-                <Row className="align-items-center g-2">
-                  <Col>
-                    <Nav className="nav-tabs-custom card-header-tabs border-bottom-0" role="tablist">
-                      <NavItem>
-                        <NavLink
-                          className={classnames({ active: activeTab === "all" }, "fw-semibold")}
-                          onClick={() => toggleTab("all")}
-                          href="#"
-                        >
-                          All{" "}
-                          <span className="badge bg-danger-subtle text-danger align-middle rounded-pill ms-1">
-                            {allProducts.length}
-                          </span>
-                        </NavLink>
-                      </NavItem>
-                      <NavItem>
-                        <NavLink
-                          className={classnames({ active: activeTab === "reventa" }, "fw-semibold")}
-                          onClick={() => toggleTab("reventa")}
-                          href="#"
-                        >
-                          Reventa{" "}
-                          <span className="badge bg-danger-subtle text-danger align-middle rounded-pill ms-1">1</span>
-                        </NavLink>
-                      </NavItem>
-                      <NavItem>
-                        <NavLink
-                          className={classnames({ active: activeTab === "personal" }, "fw-semibold")}
-                          onClick={() => toggleTab("personal")}
-                          href="#"
-                        >
-                          Personal{" "}
-                          <span className="badge bg-danger-subtle text-danger align-middle rounded-pill ms-1">1</span>
-                        </NavLink>
-                      </NavItem>
-                    </Nav>
-                  </Col>
-
-                  {/* ÚNICO botón: Agregar producto (abre modal) */}
-                  <Col className="text-end">
-                    <Button color="primary" onClick={() => setAddOpen(true)}>
-                      <i className="ri-add-line align-middle me-1"></i>
-                      Agregar producto
-                    </Button>
-                  </Col>
+                            <div className="card-body pt-0">
+                                {status === 'loading' && <div className="text-center p-5"><Spinner color="primary">Cargando...</Spinner></div>}
+                                {status === 'failed' && <div className="text-center text-danger">Error: {error}</div>}
+                                {status === 'succeeded' && (
+                                    <TableContainer
+                                        columns={columns} data={filteredProducts} isGlobalFilter={true} customPageSize={10}
+                                        divClass="table-responsive mb-1" tableClass="mb-0 align-middle table-borderless"
+                                        theadClass="table-light text-muted" SearchPlaceholder="Buscar productos..."
+                                    />
+                                )}
+                            </div>
+                        </Card>
+                    </Col>
                 </Row>
-              </div>
-
-              <div className="card-body pt-0">
-                {productList && productList.length > 0 ? (
-                  <TableContainer
-                    columns={columns}
-                    data={productList}
-                    isGlobalFilter={true}
-                    customPageSize={10}
-                    divClass="table-responsive mb-1"
-                    tableClass="mb-0 align-middle table-borderless"
-                    theadClass="table-light text-muted"
-                    isProductsFilter={true}
-                    SearchPlaceholder="Search Products..."
-                  />
-                ) : (
-                  <div className="py-4 text-center">
-                    <div>
-                      <i className="ri-search-line display-5 text-success" />
-                    </div>
-                    <div className="mt-4">
-                      <h5>Sorry! No Result Found</h5>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </Card>
-          </Col>
-        </Row>
-
-        {/* Modal Agregar producto (con carga de foto y vista previa) */}
-        <Modal isOpen={addOpen} toggle={() => setAddOpen(!addOpen)}>
-          <ModalHeader toggle={() => setAddOpen(!addOpen)}>Agregar producto</ModalHeader>
-          <Form onSubmit={handleAddProduct}>
-            <ModalBody>
-              <Row className="g-3">
-                <Col md={12}>
-                  <Label className="form-label">Nombre</Label>
-                  <Input
-                    type="text"
-                    value={newProd.name}
-                    onChange={(e) => setNewProd((p) => ({ ...p, name: e.target.value }))}
-                    placeholder="Nombre del producto"
-                    required
-                  />
-                </Col>
-                <Col md={6}>
-                  <Label className="form-label">Precio</Label>
-                  <Input
-                    type="text"
-                    value={newProd.price}
-                    onChange={(e) => setNewProd((p) => ({ ...p, price: e.target.value }))}
-                    placeholder="$79.900"
-                  />
-                </Col>
-                <Col md={6}>
-                  <Label className="form-label">Stock</Label>
-                  <Input
-                    type="number"
-                    value={newProd.stock}
-                    onChange={(e) => setNewProd((p) => ({ ...p, stock: e.target.value }))}
-                    placeholder="10"
-                    min={0}
-                  />
-                </Col>
-                <Col md={6}>
-                  <Label className="form-label">Categoría</Label>
-                  <Input
-                    type="text"
-                    value={newProd.category}
-                    onChange={(e) => setNewProd((p) => ({ ...p, category: e.target.value }))}
-                    placeholder="Beauty"
-                  />
-                </Col>
-                <Col md={6}>
-                  <Label className="form-label">Fecha publicación</Label>
-                  <Input
-                    type="date"
-                    value={newProd.publishedDate}
-                    onChange={(e) => setNewProd((p) => ({ ...p, publishedDate: e.target.value }))}
-                  />
-                </Col>
-                <Col md={12}>
-                  <Label className="form-label">Foto</Label>
-                  <Input type="file" accept="image/*" onChange={handleFileChange} />
-                  {newImagePreview && (
-                    <div className="mt-3 d-flex align-items-center gap-3">
-                      <img
-                        src={newImagePreview}
-                        alt="preview"
-                        style={{ width: 96, height: 96, objectFit: "cover", borderRadius: 8 }}
-                      />
-                      <span className="text-muted">Vista previa</span>
-                    </div>
-                  )}
-                </Col>
-              </Row>
-            </ModalBody>
-            <ModalFooter>
-              <Button
-                type="button"
-                color="light"
-                onClick={() => {
-                  setAddOpen(false);
-                  resetAddForm();
-                }}
-              >
-                Cancelar
-              </Button>
-              <Button type="submit" color="primary">
-                Guardar
-              </Button>
-            </ModalFooter>
-          </Form>
-        </Modal>
-      </Container>
-    </div>
-  );
+                
+                {/* Modal para Agregar/Editar Producto */}
+                <Modal isOpen={modalOpen} toggle={() => { setModalOpen(!modalOpen); resetFormAndImage(); }} centered size="lg">
+                    <ModalHeader toggle={() => { setModalOpen(!modalOpen); resetFormAndImage(); }}>{isEditMode ? 'Editar Producto' : 'Agregar Nuevo Producto'}</ModalHeader>
+                    <Form onSubmit={handleFormSubmit}>
+                        <ModalBody>
+                             <Row>
+                                <Col md={6} className="mb-3"><Label>Nombre</Label><Input value={formData.name || ''} onChange={e => setFormData(p => ({ ...p, name: e.target.value }))} required/></Col>
+                                <Col md={6} className="mb-3"><Label>Categoría</Label><Input type="select" value={formData.category_id || ''} onChange={e => setFormData(p => ({ ...p, category_id: e.target.value }))}><option value="">Seleccione una categoría</option>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</Input></Col>
+                                <Col md={4} className="mb-3"><Label>Precio de Venta</Label><Input type="number" value={formData.sale_price || ''} onChange={e => setFormData(p => ({ ...p, sale_price: Number(e.target.value) }))} required/></Col>
+                                <Col md={4} className="mb-3"><Label>Precio para Personal</Label><Input type="number" value={formData.staff_price || ''} onChange={e => setFormData(p => ({ ...p, staff_price: Number(e.target.value) }))} /></Col>
+                                <Col md={4} className="mb-3"><Label>Costo</Label><Input type="number" value={formData.cost_price || ''} onChange={e => setFormData(p => ({ ...p, cost_price: Number(e.target.value) }))} /></Col>
+                                <Col md={6} className="mb-3"><Label>Stock</Label><Input type="number" value={formData.stock || ''} onChange={e => setFormData(p => ({ ...p, stock: Number(e.target.value) }))} required /></Col>
+                                <Col md={6} className="mb-3"><Label>Audiencia</Label><Input type="select" value={formData.audience_type || ''} onChange={e => setFormData(p => ({ ...p, audience_type: e.target.value as any }))} required><option value="cliente">Venta a Cliente</option><option value="estilista">Uso Personal</option><option value="ambos">Ambos</option></Input></Col>
+                                <Col md={12} className="mb-3"><Label>Descripción</Label><Input type="textarea" value={formData.description || ''} onChange={e => setFormData(p => ({ ...p, description: e.target.value }))} /></Col>
+                                <Col md={12} className="mb-3"><Label>Foto</Label><Input type="file" accept="image/*" onChange={handleFileChange} />
+                                    {imagePreview && (
+                                        <div className="mt-3"><img src={imagePreview} alt="preview" style={{ width: 96, height: 96, objectFit: "cover", borderRadius: 8 }} /></div>
+                                    )}
+                                </Col>
+                            </Row>
+                        </ModalBody>
+                        <ModalFooter>
+                            <Button type="button" color="light" onClick={() => { setModalOpen(false); resetFormAndImage(); }}>Cancelar</Button>
+                            <Button type="submit" color="primary">Guardar</Button>
+                        </ModalFooter>
+                    </Form>
+                </Modal>
+                
+                {/* Modal de Confirmación de Borrado */}
+                <Modal isOpen={confirmDeleteModal} toggle={() => setConfirmDeleteModal(!confirmDeleteModal)} centered>
+                    <ModalHeader>Confirmar Eliminación</ModalHeader>
+                    <ModalBody><p>¿Estás seguro de que deseas eliminar el producto "{productToDelete?.name}"? Esta acción no se puede deshacer.</p></ModalBody>
+                    <ModalFooter>
+                        <Button color="light" onClick={() => setConfirmDeleteModal(false)}>Cancelar</Button>
+                        <Button color="danger" onClick={confirmDelete}>Eliminar</Button>
+                    </ModalFooter>
+                </Modal>
+            </Container>
+        </div>
+    );
 };
 
-export default BeautyProductsTabsDummy;
+export default ProductsPage;
