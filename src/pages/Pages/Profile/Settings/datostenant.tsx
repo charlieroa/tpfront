@@ -95,7 +95,7 @@ const DatosTenant: React.FC<DatosTenantProps> = ({
 
           <div className="form-check form-switch form-switch-lg mb-4">
             <Input className="form-check-input" type="checkbox" role="switch" id="products-for-staff-switch" checked={productsForStaff} onChange={(e) => setProductsForStaff(e.target.checked)} />
-            <Label className="form-check-label" htmlFor="products-for-staff-switch">Vender productos para uso del personal</Label>
+            <Label className="form-check-label" htmlFor="products-for-staff-switch">¿Venden productos para uso del personal?</Label>
             <p className="text-muted mt-1 small">Activa la opción de "audiencia" en el inventario para productos de uso interno.</p>
           </div>
 
