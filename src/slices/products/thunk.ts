@@ -1,13 +1,11 @@
 // En: src/slices/products/thunk.ts
 import { createAsyncThunk } from "@reduxjs/toolkit";
-import { toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
-
-// Importamos desde nuestra API real que creamos antes
+import Swal from 'sweetalert2';
 import * as productApi from "../../services/productApi";
-import { Product } from "../../services/productApi";
+import { Product, ProductCategory } from "../../services/productApi";
 
-// Thunk para obtener la lista de TODOS los productos
+// --- Thunks de Productos ---
+
 export const fetchProducts = createAsyncThunk(
     "products/fetchProducts",
     async (_, { rejectWithValue }) => {
@@ -15,13 +13,75 @@ export const fetchProducts = createAsyncThunk(
             const response = await productApi.getProducts();
             return response.data;
         } catch (error: any) {
-            toast.error("Error al cargar los productos", { autoClose: 3000 });
             return rejectWithValue(error.response?.data?.error || "Error de servidor");
         }
     }
 );
 
-// Thunk para obtener las categorías de productos
+export const createNewProduct = createAsyncThunk(
+    "products/createNewProduct",
+    async (data: { productData: Omit<Product, 'id'>, imageFile?: File }, { rejectWithValue }) => {
+        try {
+            const response = await productApi.createProduct(data.productData);
+            const newProduct = response.data;
+            if (data.imageFile && newProduct.id) {
+                const imageResponse = await productApi.uploadProductImage(newProduct.id, data.imageFile);
+                Swal.fire({ title: "¡Creado!", text: "El producto y su imagen se han creado con éxito.", icon: "success", timer: 2000 });
+                return imageResponse.data;
+            }
+            Swal.fire({ title: "¡Creado!", text: "El producto se ha creado con éxito.", icon: "success", timer: 2000 });
+            return newProduct;
+        } catch (error: any) {
+            Swal.fire({ title: "Error", text: error.response?.data?.error || "No se pudo crear el producto.", icon: "error" });
+            return rejectWithValue(error.response?.data);
+        }
+    }
+);
+
+export const updateExistingProduct = createAsyncThunk(
+    "products/updateProduct",
+    async (data: { id: string, productData: Partial<Product> }, { rejectWithValue }) => {
+        try {
+            const response = await productApi.updateProduct(data.id, data.productData);
+            Swal.fire({ title: "¡Actualizado!", text: "El producto se ha actualizado con éxito.", icon: "success", timer: 2000 });
+            return response.data;
+        } catch (error: any) {
+            Swal.fire({ title: "Error", text: error.response?.data?.error || "No se pudo actualizar el producto.", icon: "error" });
+            return rejectWithValue(error.response?.data);
+        }
+    }
+);
+
+export const deleteExistingProduct = createAsyncThunk(
+    "products/deleteProduct",
+    async (id: string, { rejectWithValue }) => {
+        try {
+            await productApi.deleteProduct(id);
+            // La confirmación visual ya la da SweetAlert en el componente antes de llamar a este thunk
+            return id;
+        } catch (error: any) {
+            Swal.fire({ title: "Error", text: error.response?.data?.error || "No se pudo eliminar el producto.", icon: "error" });
+            return rejectWithValue(error.response?.data);
+        }
+    }
+);
+
+export const uploadProductImage = createAsyncThunk(
+    "products/uploadImage",
+    async (data: { id: string, imageFile: File }, { rejectWithValue }) => {
+        try {
+            const response = await productApi.uploadProductImage(data.id, data.imageFile);
+            Swal.fire({ title: "¡Éxito!", text: "Imagen subida correctamente.", icon: "success", timer: 2000 });
+            return response.data;
+        } catch (error: any) {
+            Swal.fire({ title: "Error", text: error.response?.data?.error || "No se pudo subir la imagen.", icon: "error" });
+            return rejectWithValue(error.response?.data);
+        }
+    }
+);
+
+// --- Thunks de Categorías ---
+
 export const fetchProductCategories = createAsyncThunk(
     "products/fetchProductCategories",
     async (_, { rejectWithValue }) => {
@@ -29,78 +89,49 @@ export const fetchProductCategories = createAsyncThunk(
             const response = await productApi.getProductCategories();
             return response.data;
         } catch (error: any) {
-            toast.error("Error al cargar las categorías", { autoClose: 3000 });
-            return rejectWithValue(error.response?.data?.error || "Error de servidor");
+            return rejectWithValue(error.response?.data?.error || "Error al cargar categorías");
         }
     }
 );
 
-// Thunk para crear un nuevo producto (con lógica de subida de imagen)
-export const createNewProduct = createAsyncThunk(
-    "products/createNewProduct",
-    async (data: { productData: Omit<Product, 'id'>, imageFile?: File }, { rejectWithValue }) => {
+export const createNewCategory = createAsyncThunk(
+    "products/createCategory",
+    async (categoryName: string, { rejectWithValue }) => {
         try {
-            // 1. Primero, creamos el producto con sus datos
-            const response = await productApi.createProduct(data.productData);
-            const newProduct = response.data;
-
-            // 2. Si el usuario seleccionó una imagen, la subimos ahora
-            if (data.imageFile && newProduct.id) {
-                const imageResponse = await productApi.uploadProductImage(newProduct.id, data.imageFile);
-                toast.success("Producto e imagen creados con éxito", { autoClose: 3000 });
-                return imageResponse.data; // Devolvemos el producto actualizado con la URL de la imagen
-            }
-            
-            toast.success("Producto creado con éxito", { autoClose: 3000 });
-            return newProduct; // Devolvemos el producto recién creado (sin imagen)
-        } catch (error: any) {
-            toast.error(error.response?.data?.error || "Error al crear el producto", { autoClose: 3000 });
-            return rejectWithValue(error.response?.data || "Error de servidor");
-        }
-    }
-);
-
-// Thunk para actualizar un producto existente
-export const updateExistingProduct = createAsyncThunk(
-    "products/updateProduct",
-    async (data: { id: string, productData: Partial<Product> }, { rejectWithValue }) => {
-        try {
-            const response = await productApi.updateProduct(data.id, data.productData);
-            toast.success("Producto actualizado con éxito", { autoClose: 3000 });
+            const response = await productApi.createCategory({ name: categoryName });
+            Swal.fire({ title: "¡Éxito!", text: `Categoría "${categoryName}" creada.`, icon: "success", timer: 2000 });
             return response.data;
         } catch (error: any) {
-            toast.error(error.response?.data?.error || "Error al actualizar el producto", { autoClose: 3000 });
-            return rejectWithValue(error.response?.data || "Error de servidor");
+            Swal.fire({ title: "Error", text: error.response?.data?.error || "No se pudo crear la categoría.", icon: "error" });
+            return rejectWithValue(error.response?.data);
         }
     }
 );
 
-// Thunk para eliminar un producto
-export const deleteExistingProduct = createAsyncThunk(
-    "products/deleteProduct",
+export const updateExistingCategory = createAsyncThunk(
+    "products/updateCategory",
+    async (data: { id: string, name: string }, { rejectWithValue }) => {
+        try {
+            const response = await productApi.updateCategory(data.id, { name: data.name });
+            Swal.fire({ title: "¡Actualizada!", text: "Categoría actualizada con éxito.", icon: "success", timer: 2000 });
+            return response.data;
+        } catch (error: any) {
+            Swal.fire({ title: "Error", text: error.response?.data?.error || "No se pudo actualizar la categoría.", icon: "error" });
+            return rejectWithValue(error.response?.data);
+        }
+    }
+);
+
+export const deleteExistingCategory = createAsyncThunk(
+    "products/deleteCategory",
     async (id: string, { rejectWithValue }) => {
         try {
-            await productApi.deleteProduct(id);
-            toast.success("Producto eliminado con éxito", { autoClose: 3000 });
-            return id; // Devolvemos el ID para saber cuál eliminar del estado local
+            await productApi.deleteCategory(id);
+            // La confirmación ya se hizo en el componente
+            return id;
         } catch (error: any) {
-            toast.error(error.response?.data?.error || "Error al eliminar el producto", { autoClose: 3000 });
-            return rejectWithValue(error.response?.data || "Error de servidor");
-        }
-    }
-);
-
-// Thunk para subir/actualizar la imagen de un producto existente
-export const uploadProductImage = createAsyncThunk(
-    "products/uploadImage",
-    async (data: { id: string, imageFile: File }, { rejectWithValue }) => {
-        try {
-            const response = await productApi.uploadProductImage(data.id, data.imageFile);
-            toast.success("Imagen subida con éxito", { autoClose: 3000 });
-            return response.data; // Devuelve el producto actualizado con la nueva URL de la imagen
-        } catch (error: any) {
-            toast.error(error.response?.data?.error || "Error al subir la imagen", { autoClose: 3000 });
-            return rejectWithValue(error.response?.data || "Error de servidor");
+            Swal.fire({ title: "Error", text: error.response?.data?.error || "No se pudo eliminar la categoría.", icon: "error" });
+            return rejectWithValue(error.response?.data);
         }
     }
 );

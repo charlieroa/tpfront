@@ -6,11 +6,15 @@ import {
     createNewProduct,
     updateExistingProduct,
     deleteExistingProduct,
-    uploadProductImage
+    uploadProductImage,
+    // --- NUEVOS THUNKS IMPORTADOS ---
+    createNewCategory,
+    updateExistingCategory,
+    deleteExistingCategory
 } from './thunk';
 import { Product, ProductCategory } from "../../services/productApi";
 
-// Definimos la estructura de nuestro estado
+// La estructura del estado no cambia, ya estaba preparada para esto.
 export interface ProductsState {
     products: Product[];
     categories: ProductCategory[];
@@ -18,7 +22,6 @@ export interface ProductsState {
     error: string | null;
 }
 
-// Estado inicial para nuestro slice de productos
 export const initialState: ProductsState = {
     products: [],
     categories: [],
@@ -29,9 +32,9 @@ export const initialState: ProductsState = {
 const productSlice = createSlice({
     name: 'products',
     initialState,
-    reducers: {}, // No necesitamos reducers síncronos por ahora
+    reducers: {},
     extraReducers: (builder) => {
-        // --- Casos para fetchProducts ---
+        // --- Casos para Productos (Sin cambios) ---
         builder.addCase(fetchProducts.pending, (state) => {
             state.status = 'loading';
             state.error = null;
@@ -44,38 +47,49 @@ const productSlice = createSlice({
             state.status = 'failed';
             state.error = action.payload as string;
         });
-
-        // --- Casos para fetchProductCategories ---
-        builder.addCase(fetchProductCategories.fulfilled, (state, action: PayloadAction<ProductCategory[]>) => {
-            state.categories = action.payload;
-        });
-
-        // --- Casos para createNewProduct ---
+        
         builder.addCase(createNewProduct.fulfilled, (state, action: PayloadAction<Product>) => {
-            state.products.unshift(action.payload); // Añadir al principio de la lista
+            state.products.unshift(action.payload);
         });
-
-        // --- Casos para updateExistingProduct y uploadProductImage ---
-        // Ambos thunks devuelven el producto actualizado, así que la lógica es la misma.
+        
         const handleProductUpdate = (state: ProductsState, action: PayloadAction<Product>) => {
              state.products = state.products.map((product) =>
-                product.id === action.payload.id
-                    ? action.payload // Reemplaza el producto viejo con el actualizado
-                    : product
+                product.id === action.payload.id ? action.payload : product
             );
         };
         builder.addCase(updateExistingProduct.fulfilled, handleProductUpdate);
         builder.addCase(uploadProductImage.fulfilled, handleProductUpdate);
         
-        // --- Casos para deleteExistingProduct ---
         builder.addCase(deleteExistingProduct.fulfilled, (state, action: PayloadAction<string>) => {
-            // El payload es el ID del producto eliminado, lo filtramos del estado
             state.products = state.products.filter(
                 (product) => product.id !== action.payload
             );
         });
+
+        // --- Casos para Categorías ---
+        builder.addCase(fetchProductCategories.fulfilled, (state, action: PayloadAction<ProductCategory[]>) => {
+            state.categories = action.payload;
+        });
+
+        // --- NUEVOS CASOS PARA GESTIONAR CATEGORÍAS ---
+
+        // Cuando una categoría se crea con éxito, la añadimos al estado
+        builder.addCase(createNewCategory.fulfilled, (state, action: PayloadAction<ProductCategory>) => {
+            state.categories.push(action.payload);
+        });
+
+        // Cuando una categoría se actualiza, la reemplazamos en el estado
+        builder.addCase(updateExistingCategory.fulfilled, (state, action: PayloadAction<ProductCategory>) => {
+            state.categories = state.categories.map(cat => 
+                cat.id === action.payload.id ? action.payload : cat
+            );
+        });
+
+        // Cuando una categoría se elimina, la quitamos del estado
+        builder.addCase(deleteExistingCategory.fulfilled, (state, action: PayloadAction<string>) => {
+            state.categories = state.categories.filter(cat => cat.id !== action.payload);
+        });
     }
 });
 
-// La línea más importante: exportamos el reducer para que index.ts lo pueda encontrar
 export default productSlice.reducer;

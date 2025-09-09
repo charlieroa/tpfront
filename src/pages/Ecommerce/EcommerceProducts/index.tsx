@@ -1,75 +1,102 @@
 // Ubicación: src/pages/Ecommerce/EcommerceProducts/index.tsx
 
-import React, { useEffect, useMemo, useState } from "react";
-import {
-    Container, UncontrolledDropdown, DropdownToggle, DropdownItem, DropdownMenu,
-    Nav, NavItem, NavLink, Row, Card, CardHeader, Col,
-    Modal, ModalHeader, ModalBody, ModalFooter, Button, Form, Label, Input, Spinner
-} from "reactstrap";
+import React, { useEffect, useMemo, useState, ChangeEvent } from "react";
+import { Container, UncontrolledDropdown, DropdownToggle, DropdownItem, DropdownMenu, Nav, NavItem, NavLink, Row, Card, CardHeader, Col, Modal, ModalHeader, ModalBody, ModalFooter, Button, Form, Label, Input, Spinner, InputGroup } from "reactstrap";
 import classnames from "classnames";
 import Nouislider from "nouislider-react";
 import "nouislider/distribute/nouislider.css";
+import Swal from 'sweetalert2';
+import CreatableSelect from 'react-select/creatable';
+import CurrencyInput from 'react-currency-input-field';
+import { jwtDecode } from "jwt-decode";
 
 // Redux
 import { useSelector, useDispatch } from "react-redux";
-import { createNewProduct, deleteExistingProduct, fetchProductCategories, fetchProducts, updateExistingProduct, uploadProductImage } from "../../../slices/products/thunk";
-import { Product } from "../../../services/productApi";
+import {
+    createNewProduct, createNewCategory, deleteExistingProduct, fetchProductCategories,
+    fetchProducts, updateExistingProduct, uploadProductImage, updateExistingCategory, deleteExistingCategory
+} from "../../../slices/products/thunk";
+import { Product, ProductCategory } from "../../../services/productApi";
 import { AppDispatch, RootState } from "../../../index";
+
+// API y Auth
+import { api } from "../../../services/api";
+import { getToken } from "../../../services/auth";
 
 import BreadCrumb from "../../../Components/Common/BreadCrumb";
 import TableContainer from "../../../Components/Common/TableContainer";
+import CategoryManagerModal from "../../../Components/Common/CategoryManagerModal";
 
-// ¡SOLUCIÓN! Define la URL de tu backend aquí. Es una buena práctica usar variables de entorno.
 const BACKEND_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
-
-// Tipos para el formulario y filtros
 type TabKey = "all" | "cliente" | "estilista";
 
-// ===================================================================
-// COMPONENTE PRINCIPAL
-// ===================================================================
-const ProductsPage = () => {
-    // 1. CONEXIÓN CON REDUX
-    const dispatch: AppDispatch = useDispatch();
-    const {
-        products: allProducts,
-        categories,
-        status,
-        error
-    } = useSelector((state: RootState) => state.products);
+// Helper para obtener el tenantId del token
+const decodeTenantId = (): string | null => {
+    try {
+      const t = getToken();
+      if (!t) return null;
+      const decoded: any = jwtDecode(t);
+      return decoded?.user?.tenant_id || decoded?.tenant_id || null;
+    } catch { return null; }
+};
 
-    // 2. ESTADO LOCAL PARA LA UI (filtros y modales)
+const ProductsPage = () => {
+    const dispatch: AppDispatch = useDispatch();
+    const { products: allProducts, categories, status, error } = useSelector((state: RootState) => state.products);
+
+    // Estado para la configuración del módulo
+    const [canSellToStaff, setCanSellToStaff] = useState(true);
+
     const [activeTab, setActiveTab] = useState<TabKey>("all");
-    const [activeCategory, setActiveCategory] = useState<string>("all");
+    const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>("all");
     const [priceRange, setPriceRange] = useState([0, 500000]);
     const [modalOpen, setModalOpen] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
     const [formData, setFormData] = useState<Partial<Product>>({});
     const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
-    const [confirmDeleteModal, setConfirmDeleteModal] = useState(false);
-    const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+    const [isCategoryManagerOpen, setCategoryManagerOpen] = useState(false);
 
-    // 3. OBTENER DATOS REALES AL CARGAR EL COMPONENTE
     useEffect(() => {
         dispatch(fetchProducts());
         dispatch(fetchProductCategories());
     }, [dispatch]);
+    
+    useEffect(() => {
+        const fetchTenantSettings = async () => {
+            try {
+                const tenantId = decodeTenantId();
+                if (tenantId) {
+                    const response = await api.get(`/tenants/${tenantId}`);
+                    setCanSellToStaff(response.data.products_for_staff_enabled ?? true);
+                }
+            } catch (err) {
+                console.error("Error al cargar la configuración del tenant:", err);
+                setCanSellToStaff(true);
+            }
+        };
+        fetchTenantSettings();
+    }, []);
 
-    // 4. LÓGICA DE FILTRADO (MEMOIZED PARA EFICIENCIA)
+    const categoryOptions = useMemo(() => 
+        categories.map(cat => ({ value: cat.id, label: cat.name })), 
+    [categories]);
+
     const filteredProducts = useMemo(() => {
         let filtered = [...allProducts];
-        if (activeTab !== "all") {
-            filtered = filtered.filter(p => p.audience_type === activeTab || p.audience_type === 'ambos');
+        if (activeTab === 'cliente') {
+            filtered = filtered.filter(p => p.audience_type === 'cliente' || p.audience_type === 'ambos');
         }
-        if (activeCategory !== "all") {
-            filtered = filtered.filter(p => p.category_id === activeCategory);
+        if (activeTab === 'estilista') {
+            filtered = filtered.filter(p => p.audience_type === 'estilista' || p.audience_type === 'ambos');
+        }
+        if (activeCategoryFilter !== "all") {
+            filtered = filtered.filter(p => p.category_id === activeCategoryFilter);
         }
         filtered = filtered.filter(p => p.sale_price >= priceRange[0] && p.sale_price <= priceRange[1]);
         return filtered;
-    }, [allProducts, activeTab, activeCategory, priceRange]);
+    }, [allProducts, activeTab, activeCategoryFilter, priceRange]);
 
-    // 5. MANEJADORES DE ACCIONES (CRUD)
     const handleAddClick = () => {
         setIsEditMode(false);
         setFormData({ audience_type: 'cliente', cost_price: 0, sale_price: 0, staff_price: 0, stock: 0 });
@@ -81,23 +108,21 @@ const ProductsPage = () => {
     const handleEditClick = (product: Product) => {
         setIsEditMode(true);
         setFormData(product);
-        // Usamos BACKEND_URL también aquí para la vista previa en modo edición
         setImagePreview(product.image_url ? `${BACKEND_URL}${product.image_url}` : null);
         setSelectedImageFile(null);
         setModalOpen(true);
     };
-
+    
     const handleDeleteClick = (product: Product) => {
-        setProductToDelete(product);
-        setConfirmDeleteModal(true);
-    };
-
-    const confirmDelete = () => {
-        if (productToDelete) {
-            dispatch(deleteExistingProduct(productToDelete.id));
-            setConfirmDeleteModal(false);
-            setProductToDelete(null);
-        }
+        Swal.fire({
+            title: '¿Estás seguro?', text: `No podrás revertir la eliminación de "${product.name}"!`, icon: 'warning',
+            showCancelButton: true, confirmButtonColor: '#438eff', cancelButtonColor: '#f06548',
+            confirmButtonText: 'Sí, ¡eliminar!', cancelButtonText: 'Cancelar'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                dispatch(deleteExistingProduct(product.id));
+            }
+        })
     };
 
     const handleFormSubmit = async (e: React.FormEvent) => {
@@ -105,21 +130,15 @@ const ProductsPage = () => {
         if (isEditMode && formData.id) {
             const productDataToUpdate: Partial<Product> = { ...formData };
             delete productDataToUpdate.id;
-            
-            if (selectedImageFile) {
-                await dispatch(uploadProductImage({ id: formData.id, imageFile: selectedImageFile }));
-            }
+            const imageUploadPromise = selectedImageFile ? dispatch(uploadProductImage({ id: formData.id, imageFile: selectedImageFile })) : Promise.resolve();
+            await imageUploadPromise;
             dispatch(updateExistingProduct({ id: formData.id, productData: productDataToUpdate }));
         } else {
             const productData: Omit<Product, 'id' | 'image_url'> = {
-                name: formData.name!,
-                description: formData.description,
-                cost_price: Number(formData.cost_price || 0),
-                sale_price: Number(formData.sale_price || 0),
-                staff_price: Number(formData.staff_price || 0),
-                stock: Number(formData.stock || 0),
-                category_id: formData.category_id,
-                audience_type: formData.audience_type!,
+                name: formData.name!, description: formData.description, cost_price: Number(formData.cost_price || 0),
+                sale_price: Number(formData.sale_price || 0), staff_price: Number(formData.staff_price || 0),
+                stock: Number(formData.stock || 0), category_id: formData.category_id, 
+                audience_type: canSellToStaff ? formData.audience_type! : 'cliente',
             };
             dispatch(createNewProduct({ productData, imageFile: selectedImageFile || undefined }));
         }
@@ -127,6 +146,11 @@ const ProductsPage = () => {
         resetFormAndImage();
     };
 
+    const handleCategoryChange = (selectedOption: any) => {
+        setFormData(prev => ({...prev, category_id: selectedOption ? selectedOption.value : undefined }));
+    };
+
+    const handleCreateCategory = (inputValue: string) => { dispatch(createNewCategory(inputValue)); };
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0] ?? null;
         setSelectedImageFile(file);
@@ -136,13 +160,16 @@ const ProductsPage = () => {
     const resetFormAndImage = () => {
         setFormData({ audience_type: 'cliente' });
         setSelectedImageFile(null);
-        if (imagePreview) {
-            URL.revokeObjectURL(imagePreview);
-        }
+        if (imagePreview) { URL.revokeObjectURL(imagePreview); }
         setImagePreview(null);
     };
+    
+    const handleUpdateCategory = async (id: string, name: string) => { await dispatch(updateExistingCategory({ id, name })); };
+    const handleDeleteCategory = async (id: string) => {
+      await dispatch(deleteExistingCategory(id));
+      if (formData.category_id === id) { setFormData(prev => ({ ...prev, category_id: undefined })); }
+    };
 
-    // Columnas de la tabla
     const columns = useMemo(() => [
         {
             header: "Producto", accessorKey: "name", enableColumnFilter: false,
@@ -150,12 +177,9 @@ const ProductsPage = () => {
                 <div className="d-flex align-items-center">
                     <div className="flex-shrink-0 me-3">
                         <div className="avatar-sm bg-light rounded p-1">
-                            {/* ¡LA LÍNEA CLAVE! Usamos BACKEND_URL para construir la ruta completa a la imagen */}
                             <img 
                                 src={cell.row.original.image_url ? `${BACKEND_URL}${cell.row.original.image_url}` : "https://www.shutterstock.com/image-vector/default-ui-image-placeholder-wireframes-600nw-1037719192.jpg"} 
-                                alt={cell.getValue()} 
-                                className="img-fluid d-block" 
-                                style={{height: "100%", objectFit: "cover"}} 
+                                alt={cell.getValue()} className="img-fluid d-block" style={{height: "100%", objectFit: "cover"}} 
                                 onError={(e) => { e.currentTarget.src = "https://www.shutterstock.com/image-vector/default-ui-image-placeholder-wireframes-600nw-1037719192.jpg"; }}
                             />
                         </div>
@@ -182,7 +206,7 @@ const ProductsPage = () => {
                 </UncontrolledDropdown>
             ),
         },
-    ], [BACKEND_URL]); // <-- Añadimos BACKEND_URL a las dependencias del useMemo
+    ], [BACKEND_URL, categories]);
 
     document.title = "Inventario de Productos | StyleApp";
 
@@ -191,16 +215,15 @@ const ProductsPage = () => {
             <Container fluid>
                 <BreadCrumb title="Productos" pageTitle="Inventario" />
                 <Row>
-                    {/* Sidebar */}
                     <Col xl={3} lg={4}>
                         <Card>
                              <CardHeader><h5 className="fs-16">Filtros</h5></CardHeader>
                              <div className="card-body border-bottom">
                                 <p className="text-muted text-uppercase fs-12 fw-medium mb-2">Categorías</p>
                                 <ul className="list-unstyled mb-0 filter-list">
-                                    <li><a href="#!" className={activeCategory === 'all' ? 'active' : ''} onClick={() => setActiveCategory("all")}>Todos</a></li>
+                                    <li><a href="#!" className={activeCategoryFilter === 'all' ? 'active' : ''} onClick={() => setActiveCategoryFilter("all")}>Todos</a></li>
                                     {categories.map((cat) => (
-                                        <li key={cat.id}><a href="#!" className={activeCategory === cat.id ? 'active' : ''} onClick={() => setActiveCategory(cat.id)}>{cat.name}</a></li>
+                                        <li key={cat.id}><a href="#!" className={activeCategoryFilter === cat.id ? 'active' : ''} onClick={() => setActiveCategoryFilter(cat.id)}>{cat.name}</a></li>
                                     ))}
                                 </ul>
                              </div>
@@ -211,8 +234,6 @@ const ProductsPage = () => {
                              </div>
                         </Card>
                     </Col>
-
-                    {/* Contenido Principal */}
                     <Col xl={9} lg={8}>
                         <Card>
                             <div className="card-header border-0">
@@ -220,8 +241,12 @@ const ProductsPage = () => {
                                     <Col>
                                         <Nav className="nav-tabs-custom card-header-tabs border-bottom-0" role="tablist">
                                             <NavItem><NavLink className={classnames({ active: activeTab === 'all' })} onClick={() => setActiveTab('all')} href="#">Todos</NavLink></NavItem>
-                                            <NavItem><NavLink className={classnames({ active: activeTab === 'cliente' })} onClick={() => setActiveTab('cliente')} href="#">Venta a Clientes</NavLink></NavItem>
-                                            <NavItem><NavLink className={classnames({ active: activeTab === 'estilista' })} onClick={() => setActiveTab('estilista')} href="#">Uso Personal</NavLink></NavItem>
+                                            {canSellToStaff && (
+                                                <>
+                                                    <NavItem><NavLink className={classnames({ active: activeTab === 'cliente' })} onClick={() => setActiveTab('cliente')} href="#">Venta a Clientes</NavLink></NavItem>
+                                                    <NavItem><NavLink className={classnames({ active: activeTab === 'estilista' })} onClick={() => setActiveTab('estilista')} href="#">Uso Personal</NavLink></NavItem>
+                                                </>
+                                            )}
                                         </Nav>
                                     </Col>
                                     <Col className="text-end"><Button color="primary" onClick={handleAddClick}><i className="ri-add-line align-middle me-1" /> Agregar Producto</Button></Col>
@@ -242,23 +267,64 @@ const ProductsPage = () => {
                     </Col>
                 </Row>
                 
-                {/* Modal para Agregar/Editar Producto */}
-                <Modal isOpen={modalOpen} toggle={() => { setModalOpen(!modalOpen); resetFormAndImage(); }} centered size="lg">
-                    <ModalHeader toggle={() => { setModalOpen(!modalOpen); resetFormAndImage(); }}>{isEditMode ? 'Editar Producto' : 'Agregar Nuevo Producto'}</ModalHeader>
+                <Modal isOpen={modalOpen} toggle={() => { setModalOpen(false); resetFormAndImage(); }} centered size="lg">
+                    <ModalHeader toggle={() => { setModalOpen(false); resetFormAndImage(); }}>{isEditMode ? 'Editar Producto' : 'Agregar Nuevo Producto'}</ModalHeader>
                     <Form onSubmit={handleFormSubmit}>
                         <ModalBody>
                              <Row>
-                                <Col md={6} className="mb-3"><Label>Nombre</Label><Input value={formData.name || ''} onChange={e => setFormData(p => ({ ...p, name: e.target.value }))} required/></Col>
-                                <Col md={6} className="mb-3"><Label>Categoría</Label><Input type="select" value={formData.category_id || ''} onChange={e => setFormData(p => ({ ...p, category_id: e.target.value }))}><option value="">Seleccione una categoría</option>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</Input></Col>
-                                <Col md={4} className="mb-3"><Label>Precio de Venta</Label><Input type="number" value={formData.sale_price || ''} onChange={e => setFormData(p => ({ ...p, sale_price: Number(e.target.value) }))} required/></Col>
-                                <Col md={4} className="mb-3"><Label>Precio para Personal</Label><Input type="number" value={formData.staff_price || ''} onChange={e => setFormData(p => ({ ...p, staff_price: Number(e.target.value) }))} /></Col>
-                                <Col md={4} className="mb-3"><Label>Costo</Label><Input type="number" value={formData.cost_price || ''} onChange={e => setFormData(p => ({ ...p, cost_price: Number(e.target.value) }))} /></Col>
-                                <Col md={6} className="mb-3"><Label>Stock</Label><Input type="number" value={formData.stock || ''} onChange={e => setFormData(p => ({ ...p, stock: Number(e.target.value) }))} required /></Col>
-                                <Col md={6} className="mb-3"><Label>Audiencia</Label><Input type="select" value={formData.audience_type || ''} onChange={e => setFormData(p => ({ ...p, audience_type: e.target.value as any }))} required><option value="cliente">Venta a Cliente</option><option value="estilista">Uso Personal</option><option value="ambos">Ambos</option></Input></Col>
-                                <Col md={12} className="mb-3"><Label>Descripción</Label><Input type="textarea" value={formData.description || ''} onChange={e => setFormData(p => ({ ...p, description: e.target.value }))} /></Col>
+                                <Col md={6} className="mb-3"><Label>Nombre</Label><Input value={formData.name || ''} onChange={(e: ChangeEvent<HTMLInputElement>) => setFormData(p => ({ ...p, name: e.target.value }))} required/></Col>
+                                <Col md={6} className="mb-3">
+                                    <Label>Categoría</Label>
+                                    <InputGroup>
+                                        <CreatableSelect
+                                            className="flex-grow-1" isClearable isSearchable
+                                            options={categoryOptions}
+                                            value={categoryOptions.find(opt => opt.value === formData.category_id)}
+                                            onChange={handleCategoryChange}
+                                            onCreateOption={handleCreateCategory}
+                                            placeholder="Busca o crea una categoría..."
+                                            formatCreateLabel={inputValue => `Crear nueva categoría: "${inputValue}"`}
+                                        />
+                                        <Button color="secondary" outline type="button" onClick={() => setCategoryManagerOpen(true)} title="Gestionar categorías"><i className="ri-settings-3-line"></i></Button>
+                                    </InputGroup>
+                                </Col>
+                                
+                                {/* --- SECCIÓN DE LAYOUT DINÁMICO --- */}
+                                <Col md={canSellToStaff ? 4 : 6} className="mb-3">
+                                    <Label>Precio de Venta</Label>
+                                    <CurrencyInput className="form-control" value={formData.sale_price} onValueChange={(value) => setFormData(p => ({ ...p, sale_price: Number(value) }))} prefix="$ " groupSeparator="." decimalSeparator="," placeholder="$ 50.000" required />
+                                </Col>
+                                {canSellToStaff && (
+                                    <Col md={4} className="mb-3">
+                                        <Label>Precio para Personal</Label>
+                                        <CurrencyInput className="form-control" value={formData.staff_price} onValueChange={(value) => setFormData(p => ({ ...p, staff_price: Number(value) }))} prefix="$ " groupSeparator="." decimalSeparator="," placeholder="$ 40.000" />
+                                    </Col>
+                                )}
+                                <Col md={canSellToStaff ? 4 : 6} className="mb-3">
+                                    <Label>Costo</Label>
+                                    <CurrencyInput className="form-control" value={formData.cost_price} onValueChange={(value) => setFormData(p => ({ ...p, cost_price: Number(value) }))} prefix="$ " groupSeparator="." decimalSeparator="," placeholder="$ 30.000" />
+                                </Col>
+
+                                <Col md={canSellToStaff ? 6 : 12} className="mb-3">
+                                    <Label>Stock</Label>
+                                    <Input type="number" value={formData.stock || ''} onChange={(e: ChangeEvent<HTMLInputElement>) => setFormData(p => ({ ...p, stock: Number(e.target.value) }))} required />
+                                </Col>
+                                {canSellToStaff && (
+                                    <Col md={6} className="mb-3">
+                                        <Label>Audiencia</Label>
+                                        <Input type="select" value={formData.audience_type || 'cliente'} onChange={(e: ChangeEvent<HTMLInputElement>) => setFormData(p => ({ ...p, audience_type: e.target.value as any }))} required>
+                                            <option value="cliente">Venta a Cliente</option>
+                                            <option value="estilista">Uso Personal</option>
+                                            <option value="ambos">Ambos</option>
+                                        </Input>
+                                    </Col>
+                                )}
+                                {/* ----------------------------------- */}
+
+                                <Col md={12} className="mb-3"><Label>Descripción</Label><Input type="textarea" value={formData.description || ''} onChange={(e: ChangeEvent<HTMLInputElement>) => setFormData(p => ({ ...p, description: e.target.value }))} /></Col>
                                 <Col md={12} className="mb-3"><Label>Foto</Label><Input type="file" accept="image/*" onChange={handleFileChange} />
-                                    {imagePreview && (
-                                        <div className="mt-3"><img src={imagePreview} alt="preview" style={{ width: 96, height: 96, objectFit: "cover", borderRadius: 8 }} /></div>
+                                    {(imagePreview || (isEditMode && formData.image_url)) && (
+                                        <div className="mt-3"><img src={imagePreview || (formData.image_url ? `${BACKEND_URL}${formData.image_url}` : '')} alt="preview" style={{ width: 96, height: 96, objectFit: "cover", borderRadius: 8 }} /></div>
                                     )}
                                 </Col>
                             </Row>
@@ -270,15 +336,14 @@ const ProductsPage = () => {
                     </Form>
                 </Modal>
                 
-                {/* Modal de Confirmación de Borrado */}
-                <Modal isOpen={confirmDeleteModal} toggle={() => setConfirmDeleteModal(!confirmDeleteModal)} centered>
-                    <ModalHeader>Confirmar Eliminación</ModalHeader>
-                    <ModalBody><p>¿Estás seguro de que deseas eliminar el producto "{productToDelete?.name}"? Esta acción no se puede deshacer.</p></ModalBody>
-                    <ModalFooter>
-                        <Button color="light" onClick={() => setConfirmDeleteModal(false)}>Cancelar</Button>
-                        <Button color="danger" onClick={confirmDelete}>Eliminar</Button>
-                    </ModalFooter>
-                </Modal>
+                <CategoryManagerModal
+                  isOpen={isCategoryManagerOpen}
+                  toggle={() => setCategoryManagerOpen(false)}
+                  title="Gestionar Categorías de Productos"
+                  categories={categories}
+                  onSave={handleUpdateCategory}
+                  onDelete={handleDeleteCategory}
+                />
             </Container>
         </div>
     );
