@@ -19,11 +19,11 @@ import SimplePage from "../pages/Pages/Profile/SimplePage/SimplePage"; // Detall
 import EcommerceProducts from "../pages/Ecommerce/EcommerceProducts/index";
 import EcommerceProductDetail from "../pages/Ecommerce/EcommerceProducts/EcommerceProductDetail";
 
-// --- IMPORTACIÓN ANTIGUA ELIMINADA ---
-// import EcommerceCheckout from "../pages/Ecommerce/EcommerceCheckout";
+// --- NUESTRO NUEVO COMPONENTE DE PUNTO DE VENTA ---
+import PointOfSale from "../pages/PointOfSale";
 
-// Nómina
-import InvoiceList from "../pages/Invoices/InvoiceList";
+// --- NUESTRO NUEVO COMPONENTE DE NÓMINA ---
+import PayrollPage from "../pages/Payroll"; // <-- 1. IMPORTAMOS NUESTRA PÁGINA
 
 // Autenticación y Perfil
 import Login from "../pages/Authentication/Login";
@@ -32,9 +32,6 @@ import Register from "../pages/Authentication/Register"; // Registro de Clientes
 import UserProfile from "../pages/Authentication/user-profile";
 import TenantRegister from "../pages/Authentication/TenantRegister"; // Registro de Dueños
 import Settings from '../pages/Pages/Profile/Settings/Settings';
-
-// --- NUESTRO NUEVO COMPONENTE DE PUNTO DE VENTA ---
-import PointOfSale from "../pages/PointOfSale";
 
 
 // --- NUESTRAS RUTAS PROTEGIDAS ---
@@ -45,8 +42,7 @@ const authProtectedRoutes = [
   // Calendario
   { path: "/calendar", component: <Calendar /> },
 
-  // --- RUTA DE CHECKOUT REEMPLAZADA POR EL NUEVO PUNTO DE VENTA ---
-  // Ahora una única y potente ruta maneja todos los casos de venta.
+  // Punto de Venta
   { path: "/checkout", component: <PointOfSale /> },
 
   // Estilistas
@@ -58,7 +54,7 @@ const authProtectedRoutes = [
   { path: "/inventory/:id", component: <EcommerceProductDetail /> },
 
   // Nómina
-  { path: "/payroll", component: <InvoiceList /> },
+  { path: "/payroll", component: <PayrollPage /> }, // <-- 2. USAMOS NUESTRO COMPONENTE AQUÍ
   { path: "/settings", component: <Settings /> },
   
   // Perfil del usuario logueado

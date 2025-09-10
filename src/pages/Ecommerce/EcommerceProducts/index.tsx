@@ -99,7 +99,7 @@ const ProductsPage = () => {
 
     const handleAddClick = () => {
         setIsEditMode(false);
-        setFormData({ audience_type: 'cliente', cost_price: 0, sale_price: 0, staff_price: 0, stock: 0 });
+        setFormData({ audience_type: 'cliente', cost_price: 0, sale_price: 0, staff_price: 0, stock: 0, product_commission_percent: 0 });
         setImagePreview(null);
         setSelectedImageFile(null);
         setModalOpen(true);
@@ -135,10 +135,16 @@ const ProductsPage = () => {
             dispatch(updateExistingProduct({ id: formData.id, productData: productDataToUpdate }));
         } else {
             const productData: Omit<Product, 'id' | 'image_url'> = {
-                name: formData.name!, description: formData.description, cost_price: Number(formData.cost_price || 0),
-                sale_price: Number(formData.sale_price || 0), staff_price: Number(formData.staff_price || 0),
-                stock: Number(formData.stock || 0), category_id: formData.category_id, 
+                name: formData.name!, 
+                description: formData.description, 
+                cost_price: Number(formData.cost_price || 0),
+                sale_price: Number(formData.sale_price || 0), 
+                staff_price: Number(formData.staff_price || 0),
+                stock: Number(formData.stock || 0), 
+                category_id: formData.category_id, 
                 audience_type: canSellToStaff ? formData.audience_type! : 'cliente',
+                // Añadimos el nuevo campo de comisión
+                product_commission_percent: Number(formData.product_commission_percent || 0),
             };
             dispatch(createNewProduct({ productData, imageFile: selectedImageFile || undefined }));
         }
@@ -289,18 +295,31 @@ const ProductsPage = () => {
                                     </InputGroup>
                                 </Col>
                                 
-                                {/* --- SECCIÓN DE LAYOUT DINÁMICO --- */}
-                                <Col md={canSellToStaff ? 4 : 6} className="mb-3">
+                                <Col md={canSellToStaff ? 3 : 6} className="mb-3">
                                     <Label>Precio de Venta</Label>
                                     <CurrencyInput className="form-control" value={formData.sale_price} onValueChange={(value) => setFormData(p => ({ ...p, sale_price: Number(value) }))} prefix="$ " groupSeparator="." decimalSeparator="," placeholder="$ 50.000" required />
                                 </Col>
                                 {canSellToStaff && (
-                                    <Col md={4} className="mb-3">
-                                        <Label>Precio para Personal</Label>
-                                        <CurrencyInput className="form-control" value={formData.staff_price} onValueChange={(value) => setFormData(p => ({ ...p, staff_price: Number(value) }))} prefix="$ " groupSeparator="." decimalSeparator="," placeholder="$ 40.000" />
-                                    </Col>
+                                    <>
+                                        <Col md={3} className="mb-3">
+                                            <Label>Precio para Personal</Label>
+                                            <CurrencyInput className="form-control" value={formData.staff_price} onValueChange={(value) => setFormData(p => ({ ...p, staff_price: Number(value) }))} prefix="$ " groupSeparator="." decimalSeparator="," placeholder="$ 40.000" />
+                                        </Col>
+                                        {/* --- NUEVO CAMPO DE COMISIÓN --- */}
+                                        <Col md={3} className="mb-3">
+                                            <Label>Comisión Personal (%)</Label>
+                                            <Input 
+                                                type="number" 
+                                                value={formData.product_commission_percent || ''} 
+                                                onChange={(e: ChangeEvent<HTMLInputElement>) => setFormData(p => ({ ...p, product_commission_percent: Number(e.target.value) }))}
+                                                min={0}
+                                                max={100}
+                                                placeholder="Ej: 10"
+                                            />
+                                        </Col>
+                                    </>
                                 )}
-                                <Col md={canSellToStaff ? 4 : 6} className="mb-3">
+                                <Col md={canSellToStaff ? 3 : 6} className="mb-3">
                                     <Label>Costo</Label>
                                     <CurrencyInput className="form-control" value={formData.cost_price} onValueChange={(value) => setFormData(p => ({ ...p, cost_price: Number(value) }))} prefix="$ " groupSeparator="." decimalSeparator="," placeholder="$ 30.000" />
                                 </Col>
@@ -319,7 +338,6 @@ const ProductsPage = () => {
                                         </Input>
                                     </Col>
                                 )}
-                                {/* ----------------------------------- */}
 
                                 <Col md={12} className="mb-3"><Label>Descripción</Label><Input type="textarea" value={formData.description || ''} onChange={(e: ChangeEvent<HTMLInputElement>) => setFormData(p => ({ ...p, description: e.target.value }))} /></Col>
                                 <Col md={12} className="mb-3"><Label>Foto</Label><Input type="file" accept="image/*" onChange={handleFileChange} />

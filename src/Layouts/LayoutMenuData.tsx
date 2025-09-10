@@ -20,16 +20,15 @@ const getRoleFromToken = (): number | null => {
     }
 };
 
-// El nombre del componente ahora es LayoutMenuData para coincidir con tu archivo
 const LayoutMenuData = () => { 
     const history = useNavigate();
-    // Estados para el funcionamiento del menú (se mantienen como los tenías)
+    // Estados para el funcionamiento del menú
     const [isDashboard, setIsDashboard] = useState<boolean>(false);
     const [isEstilistas, setIsEstilistas] = useState<boolean>(false);
     const [isInventario, setIsInventario] = useState<boolean>(false);
     const [iscurrentState, setIscurrentState] = useState("Dashboard");
 
-    // --- Obtenemos el rol del usuario actual ---
+    // Obtenemos el rol del usuario actual
     const userRole = getRoleFromToken();
 
     useEffect(() => {
@@ -40,7 +39,7 @@ const LayoutMenuData = () => {
     }, [history, iscurrentState, isDashboard, isEstilistas, isInventario]);
 
     
-    // --- La lista de menús ahora tiene una propiedad "roles" para definir permisos ---
+    // La lista de menús
     const menuItems: any[] = [
         {
             label: "Menú Principal",
@@ -67,31 +66,36 @@ const LayoutMenuData = () => {
             link: "/inventory",
             roles: [1] // Visible solo para Admin
         },
+        // --- MENÚ DE NÓMINA AÑADIDO AQUÍ ---
+        {
+            id: "payroll",
+            label: "Nómina",
+            icon: "ri-money-dollar-circle-line",
+            link: "/payroll",
+            roles: [1, ] // Visible para Admin y Cajero
+        },
         {
             id: "settings",
-            label: "Configuracion",
+            label: "Configuración",
             icon: "ri-settings-3-line",
-            link: "/Settings",
+            link: "/settings", // Corregido a minúscula para consistencia
             roles: [1] // Visible solo para Admin
         },
     ];
 
-    // --- Filtramos el menú basado en el rol del usuario ---
+    // Filtramos el menú basado en el rol del usuario
     const filteredMenuItems = useMemo(() => {
-        if (!userRole) return []; // Si no hay rol (no logueado), no muestra nada
+        if (!userRole) return []; 
 
-        // Filtra la lista para mantener solo los items permitidos para el rol actual
         return menuItems.filter(item => {
-            // Si el item no tiene una propiedad "roles", es público (como los headers)
             if (!item.roles) {
                 return true;
             }
-            // Si tiene roles, verificamos que el rol del usuario esté en la lista de permitidos
             return item.roles.includes(userRole);
         });
-    }, [userRole]); // Esta lógica se recalcula solo si el rol del usuario cambia
+    }, [userRole]);
 
-    // Devolvemos la lista de menús ya filtrada para que el resto del layout la renderice
+    // Devolvemos la lista de menús ya filtrada
     return <React.Fragment>{filteredMenuItems}</React.Fragment>;
 };
 

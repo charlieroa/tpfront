@@ -18,8 +18,9 @@ import { getCalendarData } from "../../slices/thunks";
 // --- Tipos de Datos ---
 type ClientOption = { value: string; label: string; data: any; };
 type ProductOption = { value: string; label: string; data: any; };
+type StylistOption = { value: string; label: string; };
 type ServiceItem = { id: string; name: string; price: number; stylist: string; status: string; };
-type ProductItem = { id: string; name: string; price: number; quantity: number; stock: number; };
+type ProductItem = { id: string; name: string; price: number; quantity: number; stock: number; seller_id: string; seller_name: string; };
 type Cart = { services: ServiceItem[]; products: ProductItem[]; };
 type LocationState = { clientId?: string; appointmentIds?: string[]; };
 
@@ -45,6 +46,7 @@ const PointOfSale = () => {
     const { events: calendarEvents, clients: allClients } = useSelector((state: RootState) => state.Calendar);
 
     const [availableProducts, setAvailableProducts] = useState<any[]>([]);
+    const [stylists, setStylists] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedClient, setSelectedClient] = useState<ClientOption | null>(null);
     const [cart, setCart] = useState<Cart>({ services: [], products: [] });
@@ -61,7 +63,8 @@ const PointOfSale = () => {
     const [resItem, setResItem] = useState<ServiceItem | null>(null);
     const [resDateTime, setResDateTime] = useState<string>("");
     
-    // --- LÓGICA CLAVE: Determinamos si venimos de una cita ---
+    const [productToAdd, setProductToAdd] = useState<{ product: ProductOption | null; seller: StylistOption | null }>({ product: null, seller: null });
+
     const isSaleFromAppointment = !!(locationState?.clientId && locationState?.appointmentIds);
 
     useEffect(() => {
@@ -69,9 +72,11 @@ const PointOfSale = () => {
             setLoading(true);
             try {
                 const productsPromise = api.get('/products?audience=cliente');
+                const stylistsPromise = api.get('/stylists');
                 if (!allClients || allClients.length === 0) { dispatch(getCalendarData()); }
-                const [productsRes] = await Promise.all([productsPromise]);
+                const [productsRes, stylistsRes] = await Promise.all([productsPromise, stylistsPromise]);
                 setAvailableProducts(Array.isArray(productsRes.data) ? productsRes.data : []);
+                setStylists(Array.isArray(stylistsRes.data) ? stylistsRes.data : []);
             } catch (error) {
                 console.error("Error al cargar datos iniciales:", error);
                 Swal.fire("Error", "No se pudieron cargar los datos necesarios.", "error");
@@ -110,17 +115,40 @@ const PointOfSale = () => {
         availableProducts.map(p => ({ value: p.id, label: `${p.name} - ${formatterCOP.format(p.sale_price)}`, data: p })),
     [availableProducts]);
 
-    const addProductToCart = (option: ProductOption | null) => {
-        if (!option) return;
-        const product = option.data;
+    const stylistOptions = useMemo<StylistOption[]>(() => 
+        stylists.map(s => ({ value: s.id, label: `${s.first_name} ${s.last_name || ''}` })),
+    [stylists]);
+
+    const defaultSeller = useMemo<StylistOption | null>(() => {
+        const serviceStylistIds = new Set(cart.services.map(s => calendarEvents.find((e: any) => String(e.id) === s.id)?.extendedProps.stylist_id).filter(Boolean));
+        if (serviceStylistIds.size === 1) {
+            const singleStylistId = Array.from(serviceStylistIds)[0];
+            return stylistOptions.find(opt => opt.value === singleStylistId) || null;
+        }
+        return null;
+    }, [cart.services, calendarEvents, stylistOptions]);
+    
+    useEffect(() => {
+        if(defaultSeller) {
+            setProductToAdd(prev => ({...prev, seller: defaultSeller}));
+        } else {
+            setProductToAdd(prev => ({...prev, seller: null}));
+        }
+    }, [defaultSeller]);
+
+    const addProductToCart = () => {
+        if (!productToAdd.product || !productToAdd.seller) return;
+        const product = productToAdd.product.data;
+        
         setCart(prev => {
             const existing = prev.products.find(p => p.id === product.id);
             if (existing) {
                 const newQuantity = Math.min(existing.stock, existing.quantity + 1);
                 return { ...prev, products: prev.products.map(p => p.id === product.id ? { ...p, quantity: newQuantity } : p) };
             }
-            return { ...prev, products: [...prev.products, { id: product.id, name: product.name, price: product.sale_price, quantity: 1, stock: product.stock }] };
+            return { ...prev, products: [...prev.products, { id: product.id, name: product.name, price: product.sale_price, quantity: 1, stock: product.stock, seller_id: productToAdd.seller!.value, seller_name: productToAdd.seller!.label }] };
         });
+        setProductToAdd({ product: null, seller: defaultSeller });
     };
     
     const handleQuantityChange = (productId: string, newQuantity: number) => {
@@ -202,11 +230,15 @@ const PointOfSale = () => {
             const payload = {
                 client_id: selectedClient?.value,
                 services: servicesReadyForPayment.map(s => s.id),
-                products: cart.products.map(p => ({ product_id: p.id, quantity: p.quantity, unit_price: p.price })),
+                products: cart.products.map(p => ({ 
+                    product_id: p.id, 
+                    quantity: p.quantity, 
+                    seller_id: p.seller_id 
+                })),
                 payments: payments
             };
             
-            const response = await api.post('/payments', payload);
+          const response = await api.post('/payments', payload);
             await dispatch(getCalendarData());
             setPaymentSuccess({ invoiceId: response.data.invoiceId, change: change });
 
@@ -260,27 +292,47 @@ const PointOfSale = () => {
                                 </div>
                                 <div className="mb-4">
                                     <div className="d-flex align-items-center mb-3"><span className="me-2 text-primary fw-bold">1</span><h5 className="mb-0">Cliente</h5></div>
-                                    {/* --- SELECTOR DE CLIENTE CONDICIONAL --- */}
                                     <InputGroup>
                                         <Select
                                             className="flex-grow-1"
-                                            isClearable={!isSaleFromAppointment} // No se puede limpiar si viene de una cita
+                                            isClearable={!isSaleFromAppointment}
                                             isSearchable={!isSaleFromAppointment}
                                             placeholder={isSaleFromAppointment ? "Cliente de la cita" : "Busca un cliente..."}
                                             options={clientOptions}
                                             onChange={(option: ClientOption | null) => setSelectedClient(option)}
                                             value={selectedClient}
                                             isLoading={loading}
-                                            isDisabled={isSaleFromAppointment} // Se congela si viene de una cita
+                                            isDisabled={isSaleFromAppointment}
                                         />
-                                        {!isSaleFromAppointment && ( // El botón solo aparece en venta rápida
+                                        {!isSaleFromAppointment && (
                                             <Button color="primary" outline onClick={() => setNewClientModalOpen(true)}><i className="ri-add-line"></i></Button>
                                         )}
                                     </InputGroup>
                                 </div>
                                 <div className="mb-4">
                                     <div className="d-flex align-items-center mb-3"><span className="me-2 text-primary fw-bold">2</span><h5 className="mb-0">Añadir Productos</h5></div>
-                                    <Select isSearchable placeholder="Busca un producto para añadir..." options={productOptions} onChange={addProductToCart} value={null} isDisabled={!selectedClient} />
+                                    {/* --- LAYOUT CORREGIDO --- */}
+                                    <Row className="g-2">
+                                        <Col sm={5}>
+                                            <Label>Producto</Label>
+                                            <Select isSearchable placeholder="Busca un producto..." options={productOptions}
+                                                value={productToAdd.product}
+                                                onChange={(opt: ProductOption | null) => setProductToAdd(prev => ({...prev, product: opt}))}
+                                                isDisabled={!selectedClient} 
+                                            />
+                                        </Col>
+                                        <Col sm={5}>
+                                            <Label>Vendido por</Label>
+                                            <Select isSearchable placeholder="Selecciona estilista..." options={stylistOptions}
+                                                value={productToAdd.seller}
+                                                onChange={(opt: StylistOption | null) => setProductToAdd(prev => ({...prev, seller: opt}))}
+                                                isDisabled={!selectedClient} // <-- CORRECCIÓN: YA NO SE CONGELA
+                                            />
+                                        </Col>
+                                        <Col sm={2} className="d-flex align-items-end">
+                                            <Button color="primary" className="w-100" onClick={addProductToCart} disabled={!productToAdd.product || !productToAdd.seller}>Añadir</Button>
+                                        </Col>
+                                    </Row>
                                 </div>
                                 <div>
                                     <div className="d-flex align-items-center mb-3"><span className="me-2 text-primary fw-bold">3</span><h5 className="mb-0">Método de Pago</h5></div>
@@ -333,7 +385,7 @@ const PointOfSale = () => {
                                             })}
                                             {cart.products.map(item => (
                                                 <tr key={`p-${item.id}`}>
-                                                    <td><span className="fw-semibold">{item.name}</span><small className="d-block text-muted">(Producto)</small></td>
+                                                    <td><span className="fw-semibold">{item.name}</span><small className="d-block text-muted">Vendido por: {item.seller_name}</small></td>
                                                     <td>
                                                         <InputGroup size="sm" style={{width: "110px"}}>
                                                             <Button outline color="primary" onClick={() => handleQuantityChange(item.id, item.quantity - 1)}>-</Button>

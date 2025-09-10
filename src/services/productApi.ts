@@ -14,6 +14,7 @@ export interface Product {
   audience_type: 'cliente' | 'estilista' | 'ambos';
   image_url?: string;
   is_active?: boolean;
+  product_commission_percent?: number; // <-- LA LÍNEA AÑADIDA
 }
 
 export interface ProductCategory { 
@@ -36,13 +37,11 @@ export const uploadProductImage = (id: string, imageFile: File) => {
 };
 
 // =================================================================
-// ========= API para CATEGORÍAS DE PRODUCTOS (Actualizado) =========
+// ========= API para CATEGORÍAS DE PRODUCTOS (Sin cambios) =========
 // =================================================================
 
-// LEER todas las categorías (ya la tenías)
+// LEER todas las categorías
 export const getProductCategories = () => api.get<ProductCategory[]>('/product-categories');
-
-// --- NUEVAS FUNCIONES QUE DEBES AÑADIR ---
 
 // CREAR una nueva categoría
 export const createCategory = (categoryData: { name: string }) => 
