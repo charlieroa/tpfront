@@ -1,8 +1,8 @@
 // =============================================
 // File: src/pages/Calendar/AppointmentModal.tsx
-// (Versión completa y refactorizada — layout organizado)
+// (Versión completa y refactorizada — FIX para pre‑carga en modo edición)
 // =============================================
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Button,
   Col,
@@ -27,7 +27,7 @@ import {
   updateAppointment as onUpdateAppointment,
   createNewClient as onCreateNewClient,
   createAppointmentsBatch as onCreateAppointmentsBatch,
-  fetchTenantSlots,       // Horarios del salón
+  fetchTenantSlots, // Horarios del salón
   fetchAvailableStylists, // Estilistas disponibles (ordenados)
 } from "../../slices/thunks";
 
@@ -77,30 +77,11 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
   selectedEvent,
   defaultDate,
 }) => {
-  // ================== LOG A PRUEBA DE FALLOS ==================
-  console.log(
-    "--- El componente AppointmentModal SE ESTÁ RENDERIZANDO ---",
-    { isOpen, selectedEvent }
-  );
-  // ==========================================================
-
   const dispatch: any = useDispatch();
   const { clients = [], services = [] } =
     useSelector((state: any) => state.calendar || state.Calendar || {}) || {};
 
-  // ================== DEBUGGING ==================
-  useEffect(() => {
-    console.log("La lista de CLIENTES ha cambiado:", clients);
-  }, [clients]);
-
-  useEffect(() => {
-    if (selectedEvent) {
-      console.log("El EVENTO SELECCIONADO ha cambiado:", selectedEvent);
-    }
-  }, [selectedEvent]);
-  // =============================================================
-
-  // --- ESTADOS ---
+  // ================== ESTADOS ==================
   const [showNewClientForm, setShowNewClientForm] = useState<boolean>(false);
   const [extraRows, setExtraRows] = useState<ExtraRow[]>([]);
 
@@ -121,6 +102,10 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
   const [isSuggestingRow, setIsSuggestingRow] = useState<Record<number, boolean>>(
     {}
   );
+
+  // === Flags para NO limpiar campos en la primera carga de edición ===
+  const firstLoadEditRef = useRef<boolean>(false);
+  const isEditMode = !!selectedEvent;
 
   // --- FORMIK ---
   const validation = useFormik<AppointmentFormValues>({
@@ -232,6 +217,8 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
 
     if (isOpen) {
       if (selectedEvent) {
+        // bandera para NO limpiar hora/estilista en la primera pasada
+        firstLoadEditRef.current = true;
         const { client_id, service_id, stylist_id, start_time } = selectedEvent;
         const startTimeDate = new Date(start_time);
         validation.setValues({
@@ -249,22 +236,36 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
       resetState();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, selectedEvent, defaultDate, clients]);
+  }, [isOpen, selectedEvent, defaultDate]);
 
   // --- Slots por servicio/fecha ---
   useEffect(() => {
     const { service_id, date } = validation.values;
-    validation.setFieldValue("start_time", ""); // Limpiar hora si cambia servicio/fecha
+
+    // Solo limpiar la hora si NO estamos en la primera carga de edición
+    if (!(isEditMode && firstLoadEditRef.current)) {
+      validation.setFieldValue("start_time", "");
+    }
+
     if (service_id && date) {
       setIsLoadingTimeSlots(true);
       const dateStr = toYyyyMmDd(date);
       dispatch(fetchTenantSlots(dateStr, service_id))
         .then((slots: string[]) => {
-          const timeStrings = slots.map((slot) => toHHmmLocal(new Date(slot)));
-          setTimeSlots(timeStrings);
+          const fetched = slots.map((slot) => toHHmmLocal(new Date(slot)));
+          // Garantiza que el horario actual aparezca aunque ya no esté disponible
+          const current = validation.values.start_time;
+          const merged = current && !fetched.includes(current)
+            ? [current, ...fetched]
+            : fetched;
+          setTimeSlots(merged);
         })
         .catch(() => setTimeSlots([]))
-        .finally(() => setIsLoadingTimeSlots(false));
+        .finally(() => {
+          setIsLoadingTimeSlots(false);
+          // Después de la primera pasada en edición, permitimos limpiar normalmente
+          if (firstLoadEditRef.current) firstLoadEditRef.current = false;
+        });
     } else {
       setTimeSlots([]);
     }
@@ -274,15 +275,34 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
   // --- Estilistas disponibles por servicio/fecha/hora ---
   useEffect(() => {
     const { service_id, date, start_time } = validation.values;
-    validation.setFieldValue("stylist_id", ""); // Limpiar estilista si cambia algo clave
+
+    // Solo limpiar el estilista si NO estamos en la primera carga de edición
+    if (!(isEditMode && firstLoadEditRef.current)) {
+      validation.setFieldValue("stylist_id", "");
+    }
 
     if (service_id && date && start_time) {
       setIsLoadingStylists(true);
       const dateStr = toYyyyMmDd(date);
       dispatch(fetchAvailableStylists(dateStr, start_time, service_id))
-        .then(setAvailableStylists)
+        .then((stylists: Stylist[]) => {
+          // Garantiza que el estilista actual aparezca aunque no esté disponible
+          const currentId = validation.values.stylist_id;
+          const hasCurrent = stylists.some(
+            (s) => String(s.id) === String(currentId)
+          );
+          const merged = hasCurrent
+            ? stylists
+            : currentId
+            ? [{ id: currentId, first_name: currentStylistLabel || "Actual", last_name: currentStylistLabel ? "" : "(asignado)" }, ...stylists]
+            : stylists;
+          setAvailableStylists(merged);
+        })
         .catch(() => setAvailableStylists([]))
-        .finally(() => setIsLoadingStylists(false));
+        .finally(() => {
+          setIsLoadingStylists(false);
+          if (firstLoadEditRef.current) firstLoadEditRef.current = false;
+        });
     } else {
       setAvailableStylists([]);
     }
@@ -331,6 +351,21 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
   ]);
 
   // --- Digiturno (principal) ---
+  const isStylistUsedElsewhere = (
+    stylistId: string | number,
+    selfIndex?: number
+  ) => {
+    const idStr = String(stylistId);
+    if (selfIndex === undefined) {
+      // Fila principal vs extras
+      return extraRows.some((r) => String(r.stylist_id) === idStr);
+    }
+    // Fila extra vs principal
+    if (String(validation.values.stylist_id) === idStr) return true;
+    // Fila extra vs otras extras
+    return extraRows.some((r, i) => i !== selfIndex && String(r.stylist_id) === idStr);
+  };
+
   const handleSuggestMain = async () => {
     const { service_id, date, start_time } = validation.values;
     if (!service_id || !date || !start_time) {
@@ -343,9 +378,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
       const stylists: Stylist[] = await dispatch(
         fetchAvailableStylists(dateStr, start_time, service_id)
       );
-
       const nextStylist = stylists.find((s) => !isStylistUsedElsewhere(s.id));
-
       if (nextStylist) {
         validation.setFieldValue("stylist_id", String(nextStylist.id));
         toast.success(`Digiturno asignó a: ${nextStylist.first_name || ""}`);
@@ -362,7 +395,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
   // --- Digiturno (fila extra) ---
   const handleSuggestForRow = async (rowIndex: number) => {
     const { date, start_time } = validation.values;
-    const { service_id } = extraRows[rowIndex];
+    const { service_id } = extraRows[rowIndex] || {};
     if (!service_id || !date || !start_time) {
       toast.info(
         "Selecciona servicio, fecha y hora antes de usar Digiturno en esta fila."
@@ -414,28 +447,45 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
     }
   };
 
-  const isStylistUsedElsewhere = (stylistId: string | number, selfIndex?: number) => {
-    const idStr = String(stylistId);
-    if (selfIndex === undefined) {
-      // Fila principal vs extras
-      return extraRows.some((r) => String(r.stylist_id) === idStr);
-    }
-    // Fila extra vs principal
-    if (String(validation.values.stylist_id) === idStr) return true;
-    // Fila extra vs otras extras
-    return extraRows.some((r, i) => i !== selfIndex && String(r.stylist_id) === idStr);
-  };
-
   const canSubmit = useMemo(
     () => validation.isValid && !validation.isSubmitting,
     [validation.isValid, validation.isSubmitting]
   );
 
+  // === Fallbacks por si la opción seleccionada no existe aún en la lista ===
+  const clientMissing =
+    !!validation.values.client_id &&
+    !clients.some((c: any) => String(c.id) === String(validation.values.client_id));
+  const timeMissing =
+    !!validation.values.start_time &&
+    !timeSlots.includes(validation.values.start_time);
+  const stylistMissing =
+    !!validation.values.stylist_id &&
+    !availableStylists.some(
+      (s) => String(s.id) === String(validation.values.stylist_id)
+    );
+
+  // Nombre del estilista actual (si no está en la lista)
+  const currentStylistLabel = (() => {
+    const id = validation.values.stylist_id;
+    if (!id) return "";
+    // 1) Intentar leer desde selectedEvent con claves comunes
+    const ev = selectedEvent || {};
+    const f = ev.stylist_first_name || ev.stylist?.first_name || ev.first_name;
+    const l = ev.stylist_last_name || ev.stylist?.last_name || ev.last_name;
+    if (f || l) return `${f || ""} ${l || ""}`.trim();
+    // 2) Intentar deducir desde availableStylists (por si llegó entre renders)
+    const found = availableStylists.find((s) => String(s.id) === String(id));
+    if (found) return `${found.first_name || ""} ${found.last_name || ""}`.trim();
+    // 3) Último recurso: mostrar ID
+    return `ID ${id}`;
+  })();
+
   // --- RENDER ---
   return (
     <Modal isOpen={isOpen} toggle={onClose} centered size="lg">
       <ModalHeader toggle={onClose} tag="h5" className="p-3 bg-light">
-        {!!selectedEvent ? "Editar Cita" : "Agendar Cita"}
+        {isEditMode ? "Editar Cita" : "Agendar Cita"}
       </ModalHeader>
       <ModalBody>
         <Form
@@ -459,12 +509,10 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                           name="newClientFirstName"
                           onChange={validation.handleChange}
                           value={validation.values.newClientFirstName}
-                          invalid={
-                            !!(
-                              validation.touched.newClientFirstName &&
-                              validation.errors.newClientFirstName
-                            )
-                          }
+                          invalid={!!(
+                            validation.touched.newClientFirstName &&
+                            validation.errors.newClientFirstName
+                          )}
                         />
                       </FormGroup>
                     </Col>
@@ -486,12 +534,10 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                           type="email"
                           onChange={validation.handleChange}
                           value={validation.values.newClientEmail}
-                          invalid={
-                            !!(
-                              validation.touched.newClientEmail &&
-                              validation.errors.newClientEmail
-                            )
-                          }
+                          invalid={!!(
+                            validation.touched.newClientEmail &&
+                            validation.errors.newClientEmail
+                          )}
                         />
                       </FormGroup>
                     </Col>
@@ -522,15 +568,22 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                   <FormGroup className="mb-0">
                     <Label>Cliente*</Label>
                     <Row className="g-2 align-items-end">
-                      <Col md={selectedEvent ? 12 : 9}>
+                      <Col md={isEditMode ? 12 : 9}>
                         <Input
                           type="select"
                           name="client_id"
                           onChange={validation.handleChange}
                           value={validation.values.client_id}
-                          disabled={!!selectedEvent} // Deshabilita el select en modo edición
+                          disabled={isEditMode} // Deshabilita el select en modo edición
                         >
-                          <option value="">Seleccione…</option>
+                          <option value="">
+                            {clients.length ? "Seleccione…" : "Cargando…"}
+                          </option>
+                          {clientMissing && (
+                            <option value={validation.values.client_id}>
+                              Cliente actual (ID {validation.values.client_id})
+                            </option>
+                          )}
                           {clients.map((c: any) => (
                             <option key={c.id} value={c.id}>
                               {c.first_name} {c.last_name}
@@ -538,8 +591,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                           ))}
                         </Input>
                       </Col>
-                      {/* El botón de "Crear nuevo" solo aparece si NO estamos editando */}
-                      {!selectedEvent && (
+                      {!isEditMode && (
                         <Col md="auto">
                           <Button
                             color="secondary"
@@ -593,7 +645,8 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                     dateFormat: "Y-m-d",
                     altInput: true,
                     altFormat: "F j, Y",
-                    minDate: "today",
+                    // Permitimos mostrar/editar fechas pasadas cuando se edita
+                    minDate: isEditMode ? undefined : "today",
                   }}
                 />
               </FormGroup>
@@ -615,6 +668,11 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                       ? "Seleccione fecha..."
                       : "Seleccione horario..."}
                   </option>
+                  {timeMissing && (
+                    <option value={validation.values.start_time}>
+                      {validation.values.start_time} (actual)
+                    </option>
+                  )}
                   {timeSlots.map((time) => (
                     <option key={time} value={time}>
                       {time}
@@ -637,15 +695,17 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                     disabled={isLoadingStylists || !validation.values.start_time}
                   >
                     <option value="">
-                      {isLoadingStylists
-                        ? "Buscando disponibles..."
-                        : "Seleccione..."}
+                      {isLoadingStylists ? "Buscando disponibles..." : "Seleccione..."}
                     </option>
+                    {stylistMissing && validation.values.stylist_id && (
+                      <option value={validation.values.stylist_id}>
+                        {currentStylistLabel || `Estilista actual (ID ${validation.values.stylist_id})`}
+                      </option>
+                    )}
                     {availableStylists.map((stylist) => (
                       <option
                         key={stylist.id}
                         value={stylist.id}
-                        disabled={isStylistUsedElsewhere(stylist.id)}
                       >
                         {stylist.first_name} {stylist.last_name}
                       </option>
@@ -665,7 +725,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
             </Col>
 
             {/* ================= Filas Extra (multi-servicio) ================= */}
-            {!selectedEvent && (
+            {!isEditMode && (
               <>
                 {extraRows.map((row, idx) => {
                   const stylistsForThisRow = availableStylistsRows[idx] || [];
@@ -709,11 +769,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                                   {isLoadingThisRow ? "Buscando..." : "Seleccione..."}
                                 </option>
                                 {stylistsForThisRow.map((s) => (
-                                  <option
-                                    key={s.id}
-                                    value={s.id}
-                                    disabled={isStylistUsedElsewhere(s.id, idx)}
-                                  >
+                                  <option key={s.id} value={s.id}>
                                     {s.first_name} {s.last_name}
                                   </option>
                                 ))}
@@ -763,7 +819,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
             <Button type="submit" color="success" disabled={!canSubmit}>
               {validation.isSubmitting ? (
                 <Spinner size="sm" />
-              ) : !!selectedEvent ? (
+              ) : isEditMode ? (
                 "Guardar Cambios"
               ) : (
                 "Agendar Cita"
