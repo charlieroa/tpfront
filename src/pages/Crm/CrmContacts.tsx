@@ -27,18 +27,18 @@ import { useSelector, useDispatch } from "react-redux";
 import { createSelector } from "reselect";
 import { useFormik } from "formik";
 import * as Yup from "yup";
-import { toast, ToastContainer } from 'react-toastify';
 import { unwrapResult } from '@reduxjs/toolkit';
+import Swal from 'sweetalert2'; // Importación de SweetAlert2
 
 // Componentes comunes
 import BreadCrumb from "../../Components/Common/BreadCrumb";
-import DeleteModal from "../../Components/Common/DeleteModal";
+// Ya no necesitamos DeleteModal: import DeleteModal from "../../Components/Common/DeleteModal";
 import TableContainer from "../../Components/Common/TableContainer";
 import Loader from "../../Components/Common/Loader";
-import 'react-toastify/dist/ReactToastify.css';
+import 'sweetalert2/dist/sweetalert2.min.css'; // Estilos de SweetAlert2
 import dummyImg from "../../assets/images/users/user-dummy-img.jpg";
 
-// Thunks reales del CRM
+// Thunks del CRM
 import {
   getContacts,
   addNewContact,
@@ -50,7 +50,7 @@ import {
 const CrmContacts = () => {
   const dispatch: any = useDispatch();
 
-  // Selector de Redux para el estado real del CRM
+  // Selector de Redux
   const selectCrmState = createSelector(
     (state: any) => state.Crm,
     (crm) => ({
@@ -61,21 +61,20 @@ const CrmContacts = () => {
   );
   const { clients, loading, error } = useSelector(selectCrmState);
 
-  // Estados locales del componente
+  // Estados locales
   const [isEdit, setIsEdit] = useState<boolean>(false);
   const [contactToEdit, setContactToEdit] = useState<any>(null);
-  const [contactToDelete, setContactToDelete] = useState<any>(null);
   const [info, setInfo] = useState<any>(null);
   const [modal, setModal] = useState<boolean>(false);
-  const [deleteModal, setDeleteModal] = useState<boolean>(false);
+  // Ya no necesitamos el estado para el modal de borrado: const [deleteModal, setDeleteModal] = useState<boolean>(false);
   const [showPassword, setShowPassword] = useState<boolean>(false);
 
-  // Cargar los clientes al montar el componente
+  // Cargar los clientes
   useEffect(() => {
     dispatch(getContacts());
   }, [dispatch]);
 
-  // Seleccionar el primer cliente para el panel derecho o limpiar si la lista cambia
+  // Seleccionar primer cliente
   useEffect(() => {
     if (clients && clients.length > 0) {
       const currentInfoExists = info && clients.some((c: any) => c.id === info.id);
@@ -87,7 +86,7 @@ const CrmContacts = () => {
     }
   }, [clients, info]);
 
-  // Toggle para abrir/cerrar el modal
+  // Toggle para el modal de Crear/Editar
   const toggle = useCallback(() => {
     if (modal) {
       setModal(false);
@@ -98,7 +97,7 @@ const CrmContacts = () => {
     }
   }, [modal]);
 
-  // Handler para el botón de "Agregar Cliente"
+  // Handler para "Agregar Cliente"
   const handleAddClientClick = () => {
     setIsEdit(false);
     setContactToEdit(null);
@@ -106,7 +105,7 @@ const CrmContacts = () => {
     toggle();
   };
 
-  // Handler para el botón de "Editar"
+  // Handler para "Editar"
   const handleEditClick = useCallback((clientData: any) => {
     setIsEdit(true);
     const nameParts = clientData.name.split(' ');
@@ -123,26 +122,45 @@ const CrmContacts = () => {
     toggle();
   }, [toggle]);
 
-  // Handlers para la eliminación
+  // Handler para la eliminación con SweetAlert2
   const onClickDelete = (clientData: any) => {
-    setContactToDelete(clientData);
-    setDeleteModal(true);
+    Swal.fire({
+      title: '¿Estás seguro?',
+      text: `Estás a punto de eliminar a ${clientData.name}. ¡No podrás revertir esto!`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Sí, ¡eliminar!',
+      cancelButtonText: 'Cancelar'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        handleDeleteContact(clientData.id);
+      }
+    });
   };
 
-  const handleDeleteContact = async () => {
-    if (contactToDelete && contactToDelete.id) {
+  const handleDeleteContact = async (contactId: string) => {
+    if (contactId) {
       try {
-        const resultAction = await dispatch(deleteContact(contactToDelete.id));
+        const resultAction = await dispatch(deleteContact(contactId));
         unwrapResult(resultAction);
-        toast.success("Cliente eliminado con éxito");
-        setDeleteModal(false);
+        Swal.fire(
+          '¡Eliminado!',
+          'El cliente ha sido eliminado con éxito.',
+          'success'
+        );
       } catch (err) {
-        toast.error("Error al eliminar el cliente");
+        Swal.fire(
+          'Error',
+          'Ocurrió un error al eliminar el cliente.',
+          'error'
+        );
       }
     }
   };
 
-  // Formik para Clientes (Crear/Editar)
+  // Formik para Clientes
   const validation = useFormik({
     enableReinitialize: true,
     initialValues: {
@@ -175,16 +193,16 @@ const CrmContacts = () => {
         if (isEdit) {
           const resultAction = await dispatch(updateContact({ id: contactToEdit.id, ...clientData }));
           unwrapResult(resultAction);
-          toast.success("Cliente actualizado con éxito");
+          Swal.fire({ title: "¡Éxito!", text: "Cliente actualizado con éxito.", icon: "success" });
         } else {
           const resultAction = await dispatch(addNewContact(clientData));
           unwrapResult(resultAction);
-          toast.success("Cliente creado con éxito");
+          Swal.fire({ title: "¡Éxito!", text: "Cliente creado con éxito.", icon: "success" });
         }
         resetForm();
         toggle();
       } catch (err: any) {
-        toast.error(err.error || "Ocurrió un error");
+        Swal.fire({ title: "Error", text: err.error || "Ocurrió un error", icon: "error" });
       } finally {
         setSubmitting(false);
       }
@@ -240,17 +258,16 @@ const CrmContacts = () => {
   return (
     <React.Fragment>
       <div className="page-content">
-        <DeleteModal show={deleteModal} onDeleteClick={handleDeleteContact} onCloseClick={() => setDeleteModal(false)} />
+        {/* Ya no se necesita el DeleteModal aquí */}
         <Container fluid>
           <BreadCrumb title="Clientes" pageTitle="CRM" />
           <Row>
             <Col lg={12}>
               <Card>
                 <CardHeader>
-                  <div className="d-flex align-items-center flex-wrap gap-2">
-                    <div className="flex-grow-1">
-                      <button className="btn btn-primary add-btn" onClick={handleAddClientClick}><i className="ri-add-fill me-1 align-bottom"></i> Agregar cliente</button>
-                    </div>
+                  {/* --- AJUSTE DEL BOTÓN --- */}
+                  <div className="d-flex justify-content-end">
+                    <button className="btn btn-primary add-btn" onClick={handleAddClientClick}><i className="ri-add-fill me-1 align-bottom"></i> Agregar cliente</button>
                   </div>
                 </CardHeader>
               </Card>
@@ -260,15 +277,14 @@ const CrmContacts = () => {
                 <CardBody className="pt-0">
                   {loading && clients.length === 0 ? <Loader /> : (
                     <TableContainer
-  columns={columns}
-  data={clients || []}
-  isGlobalFilter={true}
-  customPageSize={5}
-  // Se elimina la propiedad 'isPaginational' que causaba el error
-  divClass="table-responsive table-card mb-3"
-  tableClass="align-middle table-nowrap"
-  theadClass="table-light"
-/>
+                      columns={columns}
+                      data={clients || []}
+                      isGlobalFilter={true}
+                      customPageSize={5}
+                      divClass="table-responsive table-card mb-3"
+                      tableClass="align-middle table-nowrap"
+                      theadClass="table-light"
+                    />
                   )}
                   {!loading && error && <div className="alert alert-danger mt-3">Error al cargar los clientes: {error.error || 'Error desconocido'}</div>}
                 </CardBody>
@@ -316,7 +332,7 @@ const CrmContacts = () => {
 
       <Modal id="showModal" isOpen={modal} toggle={toggle} centered>
         <ModalHeader className="bg-primary-subtle p-3" toggle={toggle}>
-            {isEdit ? `Editar Cliente: ${contactToEdit?.first_name || ''} ${contactToEdit?.last_name || ''}`.trim() : "Agregar Cliente"}
+          {isEdit ? `Editar Cliente: ${contactToEdit?.first_name || ''} ${contactToEdit?.last_name || ''}`.trim() : "Agregar Cliente"}
         </ModalHeader>
         <Form onSubmit={validation.handleSubmit}>
           <ModalBody>
@@ -375,7 +391,7 @@ const CrmContacts = () => {
         </Form>
       </Modal>
 
-      <ToastContainer autoClose={3000} position="bottom-right" />
+      {/* Ya no se necesita el ToastContainer */}
     </React.Fragment>
   );
 };
