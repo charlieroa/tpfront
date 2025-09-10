@@ -3,7 +3,7 @@
 import React from "react";
 import { Navigate } from "react-router-dom";
 
-// --- Nuestros Componentes de Página (Importados de la Demo) ---
+// --- Nuestros Componentes de Página ---
 
 // Dashboard
 import DashboardPrincipal from "../pages/DashboardPrincipal";
@@ -19,8 +19,8 @@ import SimplePage from "../pages/Pages/Profile/SimplePage/SimplePage"; // Detall
 import EcommerceProducts from "../pages/Ecommerce/EcommerceProducts/index";
 import EcommerceProductDetail from "../pages/Ecommerce/EcommerceProducts/EcommerceProductDetail";
 
-// --- NUEVA IMPORTACIÓN PARA CHECKOUT ---
-import EcommerceCheckout from "../pages/Ecommerce/EcommerceCheckout"; // Página para finalizar el pago
+// --- IMPORTACIÓN ANTIGUA ELIMINADA ---
+// import EcommerceCheckout from "../pages/Ecommerce/EcommerceCheckout";
 
 // Nómina
 import InvoiceList from "../pages/Invoices/InvoiceList";
@@ -33,18 +33,21 @@ import UserProfile from "../pages/Authentication/user-profile";
 import TenantRegister from "../pages/Authentication/TenantRegister"; // Registro de Dueños
 import Settings from '../pages/Pages/Profile/Settings/Settings';
 
+// --- NUESTRO NUEVO COMPONENTE DE PUNTO DE VENTA ---
+import PointOfSale from "../pages/PointOfSale";
+
+
 // --- NUESTRAS RUTAS PROTEGIDAS ---
 const authProtectedRoutes = [
   // Dashboard
   { path: "/dashboard", component: <DashboardPrincipal /> },
 
-  // Calendario y Caja
+  // Calendario
   { path: "/calendar", component: <Calendar /> },
 
-  // --- NUEVA RUTA PARA EL PROCESO DE PAGO ---
-  // Haremos que la ruta sea más limpia y semántica
-  { path: "/checkout", component: <EcommerceCheckout /> }, // Ruta genérica
-  { path: "/checkout/:appointmentIds", component: <EcommerceCheckout /> }, // Ruta con IDs de citas
+  // --- RUTA DE CHECKOUT REEMPLAZADA POR EL NUEVO PUNTO DE VENTA ---
+  // Ahora una única y potente ruta maneja todos los casos de venta.
+  { path: "/checkout", component: <PointOfSale /> },
 
   // Estilistas
   { path: "/stylists", component: <CandidateList /> },
@@ -56,7 +59,8 @@ const authProtectedRoutes = [
 
   // Nómina
   { path: "/payroll", component: <InvoiceList /> },
-   { path: "/settings", component: <Settings /> },
+  { path: "/settings", component: <Settings /> },
+  
   // Perfil del usuario logueado
   { path: "/profile", component: <UserProfile /> },
 

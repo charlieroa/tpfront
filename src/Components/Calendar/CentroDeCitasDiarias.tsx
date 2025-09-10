@@ -6,6 +6,7 @@ import classnames from "classnames";
 import SimpleBar from "simplebar-react";
 import Flatpickr from "react-flatpickr";
 import Select from 'react-select';
+import { useNavigate } from "react-router-dom";
 import TarjetaCita from './TarjetaCita';
 import api from '../../services/api';
 import Swal from 'sweetalert2';
@@ -114,7 +115,7 @@ const ModalResumenCierre: React.FC<{ isOpen: boolean; onClose: () => void; onSes
                     <Col md={6}>
                         <h6><i className="ri-arrow-down-circle-line text-success"></i> Ingresos Totales</h6>
                         <div className="vstack gap-2">
-                            {summary.incomes.map((inc: any) => (
+                            {(summary.incomes || []).map((inc: any) => (
                                 <div key={inc.payment_method} className="d-flex justify-content-between">
                                     <span>{inc.payment_method.charAt(0).toUpperCase() + inc.payment_method.slice(1)} ({inc.count})</span>
                                     <span className="fw-medium">{formatterCOP.format(inc.total)}</span>
@@ -126,7 +127,7 @@ const ModalResumenCierre: React.FC<{ isOpen: boolean; onClose: () => void; onSes
                         <h6><i className="ri-arrow-up-circle-line text-danger"></i> Egresos en Efectivo</h6>
                         <div className="vstack gap-2">
                             {summary.expenses.length === 0 && <p className="text-muted m-0">No hubo egresos.</p>}
-                            {summary.expenses.map((exp: any) => (
+                            {(summary.expenses || []).map((exp: any) => (
                                 <div key={exp.category} className="d-flex justify-content-between">
                                     <span>{exp.category === 'stylist_advance' ? 'Anticipos' : 'Facturas'} ({exp.count})</span>
                                     <span className="fw-medium text-danger">{formatterCOP.format(exp.total)}</span>
@@ -167,6 +168,7 @@ const ModalResumenCierre: React.FC<{ isOpen: boolean; onClose: () => void; onSes
 
 
 const CentroDeCitasDiarias = ({ events, onNewAppointmentClick }: CentroDeCitasDiariasProps) => {
+    const navigate = useNavigate();
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());
     const [searchTerm, setSearchTerm] = useState<string>('');
     const [dropdownOpen, setDropdownOpen] = useState<boolean>(false);
@@ -256,6 +258,13 @@ const CentroDeCitasDiarias = ({ events, onNewAppointmentClick }: CentroDeCitasDi
         else { setActiveTab('venta_personal'); }
         setPaymentsModalOpen(true);
     };
+    
+    const handleNewSale = () => {
+        // --- LÓGICA CORREGIDA ---
+        // Ya no mostramos una alerta, simplemente navegamos.
+        // La página de Punto de Venta se encargará de las validaciones.
+        navigate('/checkout');
+    };
 
     const handleSaveAnticipo = async () => {
         const amount = parseInt(anticipo.amountDigits || '0', 10) || 0;
@@ -319,13 +328,13 @@ const CentroDeCitasDiarias = ({ events, onNewAppointmentClick }: CentroDeCitasDi
     };
     
     const paymentPlan = useMemo(() => {
-        if (!paymentEndDate || !ventaPersonal.total) {
+        if (!paymentEndDate || !ventaPersonal.total || ventaPersonal.total === 0) {
             return { weeks: 1, weeklyAmount: ventaPersonal.total };
         }
         const today = new Date(); today.setHours(0, 0, 0, 0);
         const endDate = new Date(paymentEndDate); endDate.setHours(23, 59, 59, 999);
         const diffTime = Math.abs(endDate.getTime() - today.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
         const weeks = Math.max(1, Math.ceil(diffDays / 7));
         const weeklyAmount = ventaPersonal.total / weeks;
         return { weeks, weeklyAmount };
@@ -360,7 +369,13 @@ const CentroDeCitasDiarias = ({ events, onNewAppointmentClick }: CentroDeCitasDi
                         <DropdownToggle color="light" caret>Opciones</DropdownToggle>
                         <DropdownMenu end>
                             {cashSession && <DropdownItem onClick={() => setCloseModalOpen(true)} disabled={loadingSession}><i className="mdi mdi-door-closed me-2"></i> Cerrar Caja</DropdownItem>}
-                            <DropdownItem onClick={handleOpenPayments} disabled={!cashSession && !canSellToStaff} title={!cashSession && !canSellToStaff ? "Abre la caja o activa el módulo de venta a personal" : ""}><i className="mdi mdi-cash me-2"></i> Egresos / Ventas</DropdownItem>
+                            
+                            {/* === AJUSTE DE LÓGICA (SIEMPRE HABILITADA) === */}
+                            <DropdownItem onClick={handleNewSale} disabled={loadingSession}>
+                                <i className="mdi mdi-cart-plus me-2"></i> Venta Rápida (Productos)
+                            </DropdownItem>
+
+                            <DropdownItem onClick={handleOpenPayments} disabled={!cashSession && !canSellToStaff} title={!cashSession && !canSellToStaff ? "Abre la caja o activa el módulo de venta a personal" : ""}><i className="mdi mdi-cash me-2"></i> Egresos / Venta Personal</DropdownItem>
                             <DropdownItem onClick={onNewAppointmentClick}><i className="mdi mdi-plus me-2"></i> Crear Nueva Cita</DropdownItem>
                         </DropdownMenu>
                     </Dropdown>
@@ -453,7 +468,6 @@ const CentroDeCitasDiarias = ({ events, onNewAppointmentClick }: CentroDeCitasDi
                                     )}
                                 </Col>
                             </Row>
-
                             {ventaPersonal.cart.length > 0 && (
                                 <>
                                     <Label>Carrito de Compra</Label>
