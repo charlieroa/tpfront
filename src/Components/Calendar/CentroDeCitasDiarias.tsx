@@ -21,7 +21,6 @@ type Stylist = { id: string | number; first_name: string; last_name?: string; };
 type ProductForStaff = { id: string; name: string; sale_price: number; staff_price: number; stock: number; };
 type CartItem = { productId: string; name: string; quantity: number; price: number; stock: number; };
 type SelectOption = { value: string; label: string; };
-// Añadimos 'prestamo' al tipo de las pestañas
 type ActiveTab = 'anticipo' | 'factura' | 'venta_personal' | 'prestamo';
 
 // --- Helpers ---
@@ -36,200 +35,174 @@ const formatCOPString = (digits: string) => {
 
 // --- Modales ---
 const ModalAbrirCaja: React.FC<{ isOpen: boolean; onClose: () => void; onSessionOpened: () => void; }> = ({ isOpen, onClose, onSessionOpened }) => {
-    // ... (Este componente no cambia)
     const [amountDigits, setAmountDigits] = useState('');
-    const [saving, setSaving] = useState(false);
-    const handleOpenSession = async () => {
-        const amount = parseInt(amountDigits || '0', 10) || 0;
-        try {
-            setSaving(true);
-            await api.post('/cash/open', { initial_amount: amount });
-            await Swal.fire('¡Caja Abierta!', 'La sesión de caja se ha iniciado correctamente.', 'success');
-            onSessionOpened();
-            onClose();
-        } catch (e: any) {
-            Swal.fire('Error', e?.response?.data?.error || 'No se pudo abrir la sesión de caja.', 'error');
-        } finally {
-            setSaving(false);
-        }
-    };
-    useEffect(() => { if (!isOpen) setAmountDigits(''); }, [isOpen]);
-    return (
-        <Modal isOpen={isOpen} toggle={onClose} centered>
-            <ModalHeader toggle={onClose}>Abrir Caja</ModalHeader>
-            <ModalBody>
-                <Label>Monto inicial en efectivo (base)</Label>
-                <Input type="text" inputMode="numeric" placeholder="$0" value={formatCOPString(amountDigits)} onChange={(e) => setAmountDigits(onlyDigits(e.target.value))} autoFocus />
-            </ModalBody>
-            <ModalFooter>
-                <Button color="secondary" onClick={onClose}>Cancelar</Button>
-                <Button color="primary" onClick={handleOpenSession} disabled={saving}>{saving && <Spinner size="sm" className="me-2" />}Confirmar Apertura</Button>
-            </ModalFooter>
-        </Modal>
-    );
-};
-const ModalResumenCierre: React.FC<{ isOpen: boolean; onClose: () => void; onSessionClosed: () => void; sessionData: any | null; }> = ({ isOpen, onClose, onSessionClosed, sessionData }) => {
-    // ... (Este componente no cambia)
     const [saving, setSaving] = useState(false);
-    const summary = useMemo(() => {
-        const details = sessionData?.session_details || {};
-        const incomes = sessionData?.summary?.incomes_by_payment_method || [];
-        const expenses = sessionData?.summary?.expenses_by_category || [];
-        const totalCashIncomes = incomes.find((inc: any) => inc.payment_method === 'cash')?.total || 0;
-        const totalExpenses = expenses.reduce((acc: number, exp: any) => acc + Number(exp.total), 0);
-        return {
-            details, incomes, expenses,
-            attendedAppointments: sessionData?.summary?.attended_appointments_count || 0,
-            initialAmount: Number(details.initial_amount || 0),
-            totalCashIncomes: Number(totalCashIncomes),
-            totalExpenses: Number(totalExpenses),
-            expectedCash: sessionData?.expected_cash_amount || 0,
-        };
-    }, [sessionData]);
-    const handleCloseSession = async () => {
-        try {
-            setSaving(true);
-            await api.post('/cash/close', {});
-            await Swal.fire({ title: '¡Caja Cerrada!', text: 'La sesión de caja se ha cerrado y archivado correctamente.', icon: 'success' });
-            onSessionClosed();
-            onClose();
-        } catch (e: any) {
-            Swal.fire('Error', e?.response?.data?.error || 'No se pudo cerrar la sesión de caja.', 'error');
-        } finally {
-            setSaving(false);
-        }
-    };
-    if (!sessionData) return null;
-    return (
-        <Modal isOpen={isOpen} toggle={onClose} centered size="lg">
-            <ModalHeader toggle={onClose}>Resumen de Cierre de Caja</ModalHeader>
-            <ModalBody>
-                <Row>
-                    <Col md={6}>
-                        <p className='mb-1'><strong>Responsable:</strong> {summary.details.opener_name}</p>
-                        <p><strong>Apertura:</strong> {new Date(summary.details.opened_at).toLocaleString()}</p>
-                    </Col>
-                    <Col md={6} className="text-md-end">
-                        <p className="text-muted mb-0">Citas Atendidas</p>
-                        <h4 className="fw-bold">{summary.attendedAppointments}</h4>
-                    </Col>
-                </Row>
-                <hr />
-                <Row className="gy-3">
-                    <Col md={6}>
-                        <h6><i className="ri-arrow-down-circle-line text-success"></i> Ingresos Totales</h6>
-                        <div className="vstack gap-2">
-                            {(summary.incomes || []).map((inc: any) => (
-                                <div key={inc.payment_method} className="d-flex justify-content-between">
-                                    <span>{inc.payment_method.charAt(0).toUpperCase() + inc.payment_method.slice(1)} ({inc.count})</span>
-                                    <span className="fw-medium">{formatterCOP.format(inc.total)}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </Col>
-                    <Col md={6}>
-                        <h6><i className="ri-arrow-up-circle-line text-danger"></i> Egresos en Efectivo</h6>
-                        <div className="vstack gap-2">
-                            {summary.expenses.length === 0 && <p className="text-muted m-0">No hubo egresos.</p>}
-                            {(summary.expenses || []).map((exp: any) => (
-                                <div key={exp.category} className="d-flex justify-content-between">
-                                    <span>{exp.category === 'stylist_advance' ? 'Anticipos' : 'Facturas'} ({exp.count})</span>
-                                    <span className="fw-medium text-danger">{formatterCOP.format(exp.total)}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </Col>
-                </Row>
-                <hr />
-                <h6><i className="ri-cash-line"></i> Cuadre de Caja (Efectivo)</h6>
-                <div className="bg-light p-3 rounded">
-                    <div className="d-flex justify-content-between">
-                        <span className="text-muted">Base Inicial</span>
-                        <span>{formatterCOP.format(summary.initialAmount)}</span>
-                    </div>
-                    <div className="d-flex justify-content-between mt-2">
-                        <span className="text-muted">(+) Ingresos en Efectivo</span>
-                        <span className="text-success">{formatterCOP.format(summary.totalCashIncomes)}</span>
-                    </div>
-                    <div className="d-flex justify-content-between">
-                        <span className="text-muted">(-) Egresos en Efectivo</span>
-                        <span className="text-danger">{formatterCOP.format(summary.totalExpenses)}</span>
-                    </div>
-                    <hr className="my-2" />
-                    <div className="d-flex justify-content-between align-items-center">
-                        <strong className="fs-5">Total Efectivo Esperado</strong>
-                        <strong className="fs-3 text-primary">{formatterCOP.format(summary.expectedCash)}</strong>
-                    </div>
-                </div>
-            </ModalBody>
-            <ModalFooter>
-                <Button color="secondary" onClick={onClose}>Cancelar</Button>
-                <Button color="danger" onClick={handleCloseSession} disabled={saving}>{saving && <Spinner size="sm" className="me-2" />}Confirmar y Cerrar Caja</Button>
-            </ModalFooter>
-        </Modal>
-    );
+    const handleOpenSession = async () => {
+        const amount = parseInt(amountDigits || '0', 10) || 0;
+        try {
+            setSaving(true);
+            await api.post('/cash/open', { initial_amount: amount });
+            await Swal.fire('¡Caja Abierta!', 'La sesión de caja se ha iniciado correctamente.', 'success');
+            onSessionOpened();
+            onClose();
+        } catch (e: any) {
+            Swal.fire('Error', e?.response?.data?.error || 'No se pudo abrir la sesión de caja.', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
+    useEffect(() => { if (!isOpen) setAmountDigits(''); }, [isOpen]);
+    return (
+        <Modal isOpen={isOpen} toggle={onClose} centered>
+            <ModalHeader toggle={onClose}>Abrir Caja</ModalHeader>
+            <ModalBody>
+                <Label>Monto inicial en efectivo (base)</Label>
+                <Input type="text" inputMode="numeric" placeholder="$0" value={formatCOPString(amountDigits)} onChange={(e) => setAmountDigits(onlyDigits(e.target.value))} autoFocus />
+            </ModalBody>
+            <ModalFooter>
+                <Button color="secondary" onClick={onClose}>Cancelar</Button>
+                <Button color="primary" onClick={handleOpenSession} disabled={saving}>{saving && <Spinner size="sm" className="me-2" />}Confirmar Apertura</Button>
+            </ModalFooter>
+        </Modal>
+    );
 };
 
+// === COMPONENTE DE CIERRE DE CAJA AJUSTADO A TU ESPECIFICACIÓN ===
+const ModalResumenCierre: React.FC<{ isOpen: boolean; onClose: () => void; onSessionClosed: () => void; sessionData: any | null; }> = ({ isOpen, onClose, onSessionClosed, sessionData }) => {
+    const [saving, setSaving] = useState(false);
+
+    const expenseCategoryLabels: Record<string, string> = {
+        stylist_advance: 'Anticipos a Personal',
+        vendor_invoice: 'Pago a Proveedores',
+        loan_to_staff: 'Desembolso de Préstamos',
+    };
+
+    const summary = useMemo(() => {
+        const details = sessionData?.session_details || {};
+        const incomes = sessionData?.summary?.incomes_by_payment_method || [];
+        const expenses = sessionData?.summary?.expenses_by_category || [];
+        const totalCashIncomes = incomes.find((inc: any) => inc.payment_method === 'cash')?.total || 0;
+        const totalExpenses = expenses.reduce((acc: number, exp: any) => acc + Number(exp.total), 0);
+
+        return {
+            details, incomes, expenses,
+            expectedCash: sessionData?.expected_cash_amount || 0,
+            totalCashIncomes, totalExpenses
+        };
+    }, [sessionData]);
+
+    const handleCloseSession = async () => {
+        try {
+            setSaving(true);
+            // La llamada a la API ya no necesita enviar el monto contado
+            await api.post('/cash/close', {});
+            await Swal.fire({ title: '¡Caja Cerrada!', text: 'La sesión de caja se ha cerrado y archivado correctamente.', icon: 'success' });
+            onSessionClosed();
+            onClose();
+        } catch (e: any) {
+            Swal.fire('Error', e?.response?.data?.error || 'No se pudo cerrar la sesión de caja.', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (!sessionData) return null;
+
+    return (
+        <Modal isOpen={isOpen} toggle={onClose} centered size="lg">
+            <ModalHeader toggle={onClose}>Resumen de Cierre de Caja</ModalHeader>
+            <ModalBody>
+                <p><strong>Responsable:</strong> {summary.details.opener_name}</p>
+                <hr />
+                <Row className="gy-3">
+                    <Col md={6}>
+                        <h6><i className="ri-arrow-down-circle-line text-success"></i> Ingresos Totales</h6>
+                        <div className="vstack gap-2">
+                            {summary.incomes.map((inc: any) => (
+                                <div key={inc.payment_method} className="d-flex justify-content-between">
+                                    <span>Ingresos por {inc.payment_method} ({inc.count})</span>
+                                    <span className="fw-medium">{formatterCOP.format(inc.total)}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </Col>
+                    <Col md={6}>
+                        <h6><i className="ri-arrow-up-circle-line text-danger"></i> Egresos en Efectivo</h6>
+                        <div className="vstack gap-2">
+                            {summary.expenses.length === 0 && <p className="text-muted m-0">No hubo egresos.</p>}
+                            {summary.expenses.map((exp: any) => (
+                                <div key={exp.category} className="d-flex justify-content-between">
+                                    <span>{expenseCategoryLabels[exp.category] || exp.category} ({exp.count})</span>
+                                    <span className="fw-medium text-danger">-{formatterCOP.format(exp.total)}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </Col>
+                </Row>
+                <hr />
+                {/* La sección de "Monto final contado en efectivo" ha sido ELIMINADA */}
+                <div className="bg-light p-3 rounded">
+                    <div className="d-flex justify-content-between"><span className="text-muted">Base Inicial</span><span>{formatterCOP.format(summary.details.initial_amount)}</span></div>
+                    <div className="d-flex justify-content-between mt-2"><span className="text-muted">(+) Ingresos en Efectivo</span><span className="text-success">{formatterCOP.format(summary.totalCashIncomes)}</span></div>
+                    <div className="d-flex justify-content-between"><span className="text-muted">(-) Egresos en Efectivo</span><span className="text-danger">-{formatterCOP.format(summary.totalExpenses)}</span></div>
+                    <hr className="my-2" />
+                    <div className="d-flex justify-content-between align-items-center"><strong className="fs-5">Total Efectivo Esperado</strong><strong className="fs-3 text-primary">{formatterCOP.format(summary.expectedCash)}</strong></div>
+                </div>
+            </ModalBody>
+            <ModalFooter>
+                <Button color="secondary" onClick={onClose}>Cancelar</Button>
+                <Button color="danger" onClick={handleCloseSession} disabled={saving}>
+                    {saving && <Spinner size="sm" className="me-2" />}
+                    Confirmar y Cerrar Caja
+                </Button>
+            </ModalFooter>
+        </Modal>
+    );
+};
+
+
 const CentroDeCitasDiarias = ({ events, onNewAppointmentClick }: CentroDeCitasDiariasProps) => {
+    // ... El resto de este componente está completo y sin cambios ...
     const navigate = useNavigate();
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());
     const [searchTerm, setSearchTerm] = useState<string>('');
     const [dropdownOpen, setDropdownOpen] = useState<boolean>(false);
     const [paymentsModalOpen, setPaymentsModalOpen] = useState<boolean>(false);
     const [activeTab, setActiveTab] = useState<ActiveTab>('anticipo');
-    
     const [cashSession, setCashSession] = useState<any | null>(null);
     const [loadingSession, setLoadingSession] = useState<boolean>(true);
     const [stylists, setStylists] = useState<Stylist[]>([]);
     const [loadingStylists, setLoadingStylists] = useState<boolean>(false);
     const [openModalOpen, setOpenModalOpen] = useState<boolean>(false);
     const [closeModalOpen, setCloseModalOpen] = useState<boolean>(false);
-
     const [canSellToStaff, setCanSellToStaff] = useState(true);
     const [productsForStaff, setProductsForStaff] = useState<ProductForStaff[]>([]);
     const [loadingProducts, setLoadingProducts] = useState(false);
     const [ventaPersonal, setVentaPersonal] = useState<{ stylist_id: string; cart: CartItem[]; total: number; payment_terms_weeks: number; }>({ stylist_id: '', cart: [], total: 0, payment_terms_weeks: 1 });
     const [paymentEndDate, setPaymentEndDate] = useState<Date | null>(null);
     const [savingVenta, setSavingVenta] = useState(false);
-    
     const [anticipo, setAnticipo] = useState({ stylist_id: '', amountDigits: '', description: '' });
     const [factura, setFactura] = useState({ reference: '', amountDigits: '', description: '' });
-    
-    // --- NUEVO ESTADO PARA PRÉSTAMOS ---
     const [canGiveLoans, setCanGiveLoans] = useState(true);
     const [prestamo, setPrestamo] = useState({ stylist_id: '', amountDigits: '', weeks: '4', interest_percent: '5' });
     const [savingPrestamo, setSavingPrestamo] = useState(false);
-
     const toggleDropdown = () => setDropdownOpen(!dropdownOpen);
-
-    const fetchCurrentSession = async () => {
-        try { setLoadingSession(true); const { data } = await api.get('/cash/current'); setCashSession(data); }
-        catch (e) { console.error("Error cargando la sesión de caja", e); setCashSession(null); }
-        finally { setLoadingSession(false); }
-    };
-
+    const fetchCurrentSession = async () => { try { setLoadingSession(true); const { data } = await api.get('/cash/current'); setCashSession(data); } catch (e) { console.error("Error cargando la sesión de caja", e); setCashSession(null); } finally { setLoadingSession(false); } };
     useEffect(() => { fetchCurrentSession(); }, []);
-
     const fetchPrerequisites = async () => {
         setLoadingStylists(true); setLoadingProducts(true);
         try {
-            const token = getToken();
-            if (!token) return;
+            const token = getToken(); if (!token) return;
             const decodedToken = jwtDecode<{ user?: { tenant_id?: string } }>(token);
             const tenantId = decodedToken?.user?.tenant_id;
-
             const stylistsPromise = api.get('/stylists');
             const tenantPromise = tenantId ? api.get(`/tenants/${tenantId}`) : Promise.resolve({ data: { products_for_staff_enabled: true, loans_to_staff_enabled: true } });
-            
             const [stylistsRes, tenantRes] = await Promise.all([stylistsPromise, tenantPromise]);
-            
             setStylists(Array.isArray(stylistsRes.data) ? stylistsRes.data : []);
-            
             const sellToStaffEnabled = tenantRes.data?.products_for_staff_enabled ?? true;
             const giveLoansEnabled = tenantRes.data?.loans_to_staff_enabled ?? true;
             setCanSellToStaff(sellToStaffEnabled);
             setCanGiveLoans(giveLoansEnabled);
-
             if (sellToStaffEnabled) {
                 const productsRes = await api.get('/products?audience=estilista');
                 setProductsForStaff(Array.isArray(productsRes.data) ? productsRes.data : []);
@@ -237,193 +210,20 @@ const CentroDeCitasDiarias = ({ events, onNewAppointmentClick }: CentroDeCitasDi
         } catch (e) { console.error('Error cargando prerequisitos:', e); }
         finally { setLoadingStylists(false); setLoadingProducts(false); }
     };
-
     useEffect(() => { if (paymentsModalOpen) fetchPrerequisites(); }, [paymentsModalOpen]);
-    
-    const gruposPorCliente = useMemo<GrupoCliente[]>(() => {
-        // ... (Esta lógica no cambia)
-        if (!cashSession) return [];
-        const startOfDay = new Date(selectedDate); startOfDay.setHours(0, 0, 0, 0);
-        const endOfDay = new Date(selectedDate); endOfDay.setHours(23, 59, 59, 999);
-        const filtradas: CitaEvento[] = events.filter((event) => {
-            const fechaCita = new Date(event.start);
-            const enFecha = fechaCita >= startOfDay && fechaCita <= endOfDay;
-            const esOperativa = event.extendedProps.status !== 'cancelled' && event.extendedProps.status !== 'completed';
-            if (!enFecha || !esOperativa) return false;
-            if (searchTerm) {
-                const q = searchTerm.toLowerCase();
-                return (event.extendedProps.client_first_name?.toLowerCase().includes(q) || event.extendedProps.client_last_name?.toLowerCase().includes(q) || event.extendedProps.stylist_first_name?.toLowerCase().includes(q));
-            }
-            return true;
-        });
-        const map = new Map<string | number, GrupoCliente>();
-        for (const ev of filtradas) {
-            const ep = ev.extendedProps || {}; const clientId = ep.client_id ?? ep.clientId; if (clientId == null) continue;
-            const item = { id: ev.id, service_name: ep.service_name, stylist_first_name: ep.stylist_first_name, start_time: ep.start_time ?? ev.start, };
-            if (!map.has(clientId)) {
-                map.set(clientId, { clientId, client_first_name: ep.client_first_name, client_last_name: ep.client_last_name, earliestStartISO: item.start_time, count: 1, appointments: [item], });
-            } else {
-                const g = map.get(clientId)!; g.appointments.push(item); g.count += 1;
-                if (new Date(item.start_time).getTime() < new Date(g.earliestStartISO).getTime()) { g.earliestStartISO = item.start_time; }
-            }
-        }
-        return Array.from(map.values()).sort((a, b) => new Date(a.earliestStartISO).getTime() - new Date(b.earliestStartISO).getTime());
-    }, [events, selectedDate, searchTerm, cashSession]);
-
-    const handleOpenPayments = () => {
-        if (cashSession) { setActiveTab('anticipo'); }
-        else if(canSellToStaff) { setActiveTab('venta_personal'); }
-        setPaymentsModalOpen(true);
-    };
-
-    const handleNewSale = () => {
-        navigate('/checkout');
-    };
-
-    const handleSaveAnticipo = async () => {
-        // ... (Esta lógica no cambia)
-        const amount = parseInt(anticipo.amountDigits || '0', 10) || 0;
-        if (!anticipo.stylist_id || amount <= 0) { Swal.fire('Datos incompletos', 'Selecciona un estilista y un monto válido.', 'warning'); return; }
-        try {
-            await api.post('/cash/movements', { type: 'payroll_advance', category: 'stylist_advance', description: anticipo.description || 'Anticipo', amount, payment_method: 'cash', related_entity_type: 'stylist', related_entity_id: anticipo.stylist_id });
-            Swal.fire('¡Éxito!', 'Anticipo registrado correctamente.', 'success');
-            setPaymentsModalOpen(false);
-            setAnticipo({ stylist_id: '', amountDigits: '', description: '' });
-            fetchCurrentSession();
-        } catch (e: any) { console.error(e); Swal.fire('Error', e?.response?.data?.error || 'No se pudo registrar el anticipo.', 'error'); }
-    };
-
-    const handleSaveFactura = async () => {
-        // ... (Esta lógica no cambia)
-        const amount = parseInt(factura.amountDigits || '0', 10) || 0;
-        if (!factura.reference || amount <= 0) { Swal.fire('Datos incompletos', 'Ingresa una referencia y un monto válido.', 'warning'); return; }
-        try {
-            await api.post('/cash/movements', { type: 'expense', category: 'vendor_invoice', invoice_ref: factura.reference, description: factura.description || 'Factura de proveedor', amount, payment_method: 'cash' });
-            Swal.fire('¡Éxito!', 'Factura registrada correctamente.', 'success');
-            setPaymentsModalOpen(false);
-            setFactura({ reference: '', amountDigits: '', description: '' });
-            fetchCurrentSession();
-        } catch (e: any) { console.error(e); Swal.fire('Error', e?.response?.data?.error || 'No se pudo registrar la factura.', 'error'); }
-    };
-
-    const calculateTotal = (cart: CartItem[]) => {
-        // ... (Esta lógica no cambia)
-        return cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    };
-
-    const addToCart = (product: ProductForStaff | null) => {
-        // ... (Esta lógica no cambia)
-        if (!product) return;
-        setVentaPersonal(prev => {
-            const existingItem = prev.cart.find(item => item.productId === product.id);
-            if (existingItem) return prev;
-            const priceToUse = product.staff_price ?? product.sale_price;
-            const newItem: CartItem = { productId: product.id, name: product.name, quantity: 1, price: priceToUse, stock: product.stock };
-            const updatedCart = [...prev.cart, newItem];
-            return { ...prev, cart: updatedCart, total: calculateTotal(updatedCart) };
-        });
-    };
-
-    const handleQuantityChange = (productId: string, newQuantity: number) => {
-        // ... (Esta lógica no cambia)
-        setVentaPersonal(prev => {
-            const updatedCart = prev.cart.map(item => {
-                if (item.productId === productId) {
-                    const validatedQty = Math.max(1, Math.min(item.stock, newQuantity || 1));
-                    return { ...item, quantity: validatedQty };
-                }
-                return item;
-            });
-            return { ...prev, cart: updatedCart, total: calculateTotal(updatedCart) };
-        });
-    };
-
-    const removeFromCart = (productId: string) => {
-        // ... (Esta lógica no cambia)
-        setVentaPersonal(prev => {
-            const updatedCart = prev.cart.filter(item => item.productId !== productId);
-            return { ...prev, cart: updatedCart, total: calculateTotal(updatedCart) };
-        });
-    };
-
-    const paymentPlan = useMemo(() => {
-        // ... (Esta lógica no cambia)
-        if (!paymentEndDate || !ventaPersonal.total || ventaPersonal.total === 0) {
-            return { weeks: 1, weeklyAmount: ventaPersonal.total };
-        }
-        const today = new Date(); today.setHours(0, 0, 0, 0);
-        const endDate = new Date(paymentEndDate); endDate.setHours(23, 59, 59, 999);
-        const diffTime = Math.abs(endDate.getTime() - today.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-        const weeks = Math.max(1, Math.ceil(diffDays / 7));
-        const weeklyAmount = ventaPersonal.total / weeks;
-        return { weeks, weeklyAmount };
-    }, [paymentEndDate, ventaPersonal.total]);
-
-    const handleSaveVentaPersonal = async () => {
-        // ... (Esta lógica no cambia)
-        if (!ventaPersonal.stylist_id || ventaPersonal.cart.length === 0) {
-            Swal.fire('Datos incompletos', 'Debes seleccionar un estilista y añadir al menos un producto.', 'warning');
-            return;
-        }
-        setSavingVenta(true);
-        try {
-            const payload = { stylist_id: ventaPersonal.stylist_id, payment_terms_weeks: paymentPlan.weeks, items: ventaPersonal.cart.map(item => ({ product_id: item.productId, quantity: item.quantity, price_at_sale: item.price })) };
-            await api.post('/staff-purchases', payload);
-            Swal.fire('¡Venta Registrada!', 'La compra se ha registrado como un adelanto de nómina.', 'success');
-            setPaymentsModalOpen(false);
-            setVentaPersonal({ stylist_id: '', cart: [], total: 0, payment_terms_weeks: 1 });
-            setPaymentEndDate(null);
-        } catch (e: any) {
-            Swal.fire('Error', e?.response?.data?.error || 'No se pudo registrar la venta.', 'error');
-        } finally {
-            setSavingVenta(false);
-        }
-    };
-    
-    // --- NUEVA LÓGICA PARA PRÉSTAMOS ---
-    const prestamoSummary = useMemo(() => {
-        const principal = parseInt(prestamo.amountDigits || '0', 10);
-        const weeks = parseInt(prestamo.weeks || '0', 10);
-        const interestRate = parseFloat(prestamo.interest_percent || '0');
-
-        if (!principal || !weeks || isNaN(interestRate) || interestRate < 0) {
-            return { totalInterest: 0, totalToRepay: 0, weeklyInstallment: 0, isValid: false };
-        }
-
-        const totalInterest = principal * (interestRate / 100);
-        const totalToRepay = principal + totalInterest;
-        const weeklyInstallment = totalToRepay / weeks;
-
-        return { totalInterest, totalToRepay, weeklyInstallment, isValid: true };
-    }, [prestamo.amountDigits, prestamo.weeks, prestamo.interest_percent]);
-
-    const handleSavePrestamo = async () => {
-        if (!prestamo.stylist_id || !prestamoSummary.isValid) {
-            Swal.fire('Datos incompletos', 'Completa todos los campos del préstamo correctamente.', 'warning');
-            return;
-        }
-        setSavingPrestamo(true);
-        try {
-            const payload = {
-                stylist_id: prestamo.stylist_id,
-                principal_amount: parseInt(prestamo.amountDigits, 10),
-                weeks: parseInt(prestamo.weeks, 10),
-                interest_percent: parseFloat(prestamo.interest_percent),
-                disburse_from_cash: true,
-            };
-            await api.post('/staff-loans', payload);
-            Swal.fire('¡Préstamo Registrado!', 'El préstamo ha sido creado y el egreso se registró en caja.', 'success');
-            setPaymentsModalOpen(false);
-            setPrestamo({ stylist_id: '', amountDigits: '', weeks: '4', interest_percent: '5' });
-            fetchCurrentSession();
-        } catch (e: any) {
-            Swal.fire('Error', e?.response?.data?.error || 'No se pudo registrar el préstamo.', 'error');
-        } finally {
-            setSavingPrestamo(false);
-        }
-    };
-
+    const gruposPorCliente = useMemo<GrupoCliente[]>(() => { if (!cashSession) return []; const startOfDay = new Date(selectedDate); startOfDay.setHours(0, 0, 0, 0); const endOfDay = new Date(selectedDate); endOfDay.setHours(23, 59, 59, 999); const filtradas: CitaEvento[] = events.filter((event) => { const fechaCita = new Date(event.start); const enFecha = fechaCita >= startOfDay && fechaCita <= endOfDay; const esOperativa = event.extendedProps.status !== 'cancelled' && event.extendedProps.status !== 'completed'; if (!enFecha || !esOperativa) return false; if (searchTerm) { const q = searchTerm.toLowerCase(); return (event.extendedProps.client_first_name?.toLowerCase().includes(q) || event.extendedProps.client_last_name?.toLowerCase().includes(q) || event.extendedProps.stylist_first_name?.toLowerCase().includes(q)); } return true; }); const map = new Map<string | number, GrupoCliente>(); for (const ev of filtradas) { const ep = ev.extendedProps || {}; const clientId = ep.client_id ?? ep.clientId; if (clientId == null) continue; const item = { id: ev.id, service_name: ep.service_name, stylist_first_name: ep.stylist_first_name, start_time: ep.start_time ?? ev.start, }; if (!map.has(clientId)) { map.set(clientId, { clientId, client_first_name: ep.client_first_name, client_last_name: ep.client_last_name, earliestStartISO: item.start_time, count: 1, appointments: [item], }); } else { const g = map.get(clientId)!; g.appointments.push(item); g.count += 1; if (new Date(item.start_time).getTime() < new Date(g.earliestStartISO).getTime()) { g.earliestStartISO = item.start_time; } } } return Array.from(map.values()).sort((a, b) => new Date(a.earliestStartISO).getTime() - new Date(b.earliestStartISO).getTime()); }, [events, selectedDate, searchTerm, cashSession]);
+    const handleOpenPayments = () => { if (cashSession) { setActiveTab('anticipo'); } else if(canSellToStaff) { setActiveTab('venta_personal'); } setPaymentsModalOpen(true); };
+    const handleNewSale = () => { navigate('/checkout'); };
+    const handleSaveAnticipo = async () => { const amount = parseInt(anticipo.amountDigits || '0', 10) || 0; if (!anticipo.stylist_id || amount <= 0) { Swal.fire('Datos incompletos', 'Selecciona un estilista y un monto válido.', 'warning'); return; } try { await api.post('/cash/movements', { type: 'payroll_advance', category: 'stylist_advance', description: anticipo.description || 'Anticipo', amount, payment_method: 'cash', related_entity_type: 'stylist', related_entity_id: anticipo.stylist_id }); Swal.fire('¡Éxito!', 'Anticipo registrado correctamente.', 'success'); setPaymentsModalOpen(false); setAnticipo({ stylist_id: '', amountDigits: '', description: '' }); fetchCurrentSession(); } catch (e: any) { console.error(e); Swal.fire('Error', e?.response?.data?.error || 'No se pudo registrar el anticipo.', 'error'); } };
+    const handleSaveFactura = async () => { const amount = parseInt(factura.amountDigits || '0', 10) || 0; if (!factura.reference || amount <= 0) { Swal.fire('Datos incompletos', 'Ingresa una referencia y un monto válido.', 'warning'); return; } try { await api.post('/cash/movements', { type: 'expense', category: 'vendor_invoice', invoice_ref: factura.reference, description: factura.description || 'Factura de proveedor', amount, payment_method: 'cash' }); Swal.fire('¡Éxito!', 'Factura registrada correctamente.', 'success'); setPaymentsModalOpen(false); setFactura({ reference: '', amountDigits: '', description: '' }); fetchCurrentSession(); } catch (e: any) { console.error(e); Swal.fire('Error', e?.response?.data?.error || 'No se pudo registrar la factura.', 'error'); } };
+    const calculateTotal = (cart: CartItem[]) => { return cart.reduce((sum, item) => sum + (item.price * item.quantity), 0); };
+    const addToCart = (product: ProductForStaff | null) => { if (!product) return; setVentaPersonal(prev => { const existingItem = prev.cart.find(item => item.productId === product.id); if (existingItem) return prev; const priceToUse = product.staff_price ?? product.sale_price; const newItem: CartItem = { productId: product.id, name: product.name, quantity: 1, price: priceToUse, stock: product.stock }; const updatedCart = [...prev.cart, newItem]; return { ...prev, cart: updatedCart, total: calculateTotal(updatedCart) }; }); };
+    const handleQuantityChange = (productId: string, newQuantity: number) => { setVentaPersonal(prev => { const updatedCart = prev.cart.map(item => { if (item.productId === productId) { const validatedQty = Math.max(1, Math.min(item.stock, newQuantity || 1)); return { ...item, quantity: validatedQty }; } return item; }); return { ...prev, cart: updatedCart, total: calculateTotal(updatedCart) }; }); };
+    const removeFromCart = (productId: string) => { setVentaPersonal(prev => { const updatedCart = prev.cart.filter(item => item.productId !== productId); return { ...prev, cart: updatedCart, total: calculateTotal(updatedCart) }; }); };
+    const paymentPlan = useMemo(() => { if (!paymentEndDate || !ventaPersonal.total || ventaPersonal.total === 0) { return { weeks: 1, weeklyAmount: ventaPersonal.total }; } const today = new Date(); today.setHours(0, 0, 0, 0); const endDate = new Date(paymentEndDate); endDate.setHours(23, 59, 59, 999); const diffTime = Math.abs(endDate.getTime() - today.getTime()); const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; const weeks = Math.max(1, Math.ceil(diffDays / 7)); const weeklyAmount = ventaPersonal.total / weeks; return { weeks, weeklyAmount }; }, [paymentEndDate, ventaPersonal.total]);
+    const handleSaveVentaPersonal = async () => { if (!ventaPersonal.stylist_id || ventaPersonal.cart.length === 0) { Swal.fire('Datos incompletos', 'Debes seleccionar un estilista y añadir al menos un producto.', 'warning'); return; } setSavingVenta(true); try { const payload = { stylist_id: ventaPersonal.stylist_id, payment_terms_weeks: paymentPlan.weeks, items: ventaPersonal.cart.map(item => ({ product_id: item.productId, quantity: item.quantity, price_at_sale: item.price })) }; await api.post('/staff-purchases', payload); Swal.fire('¡Venta Registrada!', 'La compra se ha registrado como un adelanto de nómina.', 'success'); setPaymentsModalOpen(false); setVentaPersonal({ stylist_id: '', cart: [], total: 0, payment_terms_weeks: 1 }); setPaymentEndDate(null); } catch (e: any) { Swal.fire('Error', e?.response?.data?.error || 'No se pudo registrar la venta.', 'error'); } finally { setSavingVenta(false); } };
+    const prestamoSummary = useMemo(() => { const principal = parseInt(prestamo.amountDigits || '0', 10); const weeks = parseInt(prestamo.weeks || '0', 10); const interestRate = parseFloat(prestamo.interest_percent || '0'); if (!principal || !weeks || isNaN(interestRate) || interestRate < 0) { return { totalInterest: 0, totalToRepay: 0, weeklyInstallment: 0, isValid: false }; } const totalInterest = principal * (interestRate / 100); const totalToRepay = principal + totalInterest; const weeklyInstallment = totalToRepay / weeks; return { totalInterest, totalToRepay, weeklyInstallment, isValid: true }; }, [prestamo.amountDigits, prestamo.weeks, prestamo.interest_percent]);
+    const handleSavePrestamo = async () => { if (!prestamo.stylist_id || !prestamoSummary.isValid) { Swal.fire('Datos incompletos', 'Completa todos los campos del préstamo correctamente.', 'warning'); return; } setSavingPrestamo(true); try { const payload = { stylist_id: prestamo.stylist_id, principal_amount: parseInt(prestamo.amountDigits, 10), weeks: parseInt(prestamo.weeks, 10), interest_percent: parseFloat(prestamo.interest_percent), disburse_from_cash: true, }; await api.post('/staff-loans', payload); Swal.fire('¡Préstamo Registrado!', 'El préstamo ha sido creado y el egreso se registró en caja.', 'success'); setPaymentsModalOpen(false); setPrestamo({ stylist_id: '', amountDigits: '', weeks: '4', interest_percent: '5' }); fetchCurrentSession(); } catch (e: any) { Swal.fire('Error', e?.response?.data?.error || 'No se pudo registrar el préstamo.', 'error'); } finally { setSavingPrestamo(false); } };
     return (
         <Card>
             <CardBody>
@@ -433,17 +233,13 @@ const CentroDeCitasDiarias = ({ events, onNewAppointmentClick }: CentroDeCitasDi
                         <DropdownToggle color="light" caret>Opciones</DropdownToggle>
                         <DropdownMenu end>
                             {cashSession && <DropdownItem onClick={() => setCloseModalOpen(true)} disabled={loadingSession}><i className="mdi mdi-door-closed me-2"></i> Cerrar Caja</DropdownItem>}
-                            <DropdownItem onClick={handleNewSale} disabled={loadingSession}>
-                                <i className="mdi mdi-cart-plus me-2"></i> Venta Rápida (Productos)
-                            </DropdownItem>
+                            <DropdownItem onClick={handleNewSale} disabled={loadingSession}><i className="mdi mdi-cart-plus me-2"></i> Venta Rápida (Productos)</DropdownItem>
                             <DropdownItem onClick={handleOpenPayments} disabled={!cashSession && !canSellToStaff && !canGiveLoans} title={!cashSession && !canSellToStaff && !canGiveLoans ? "Abre la caja o activa los módulos de personal" : ""}><i className="mdi mdi-cash me-2"></i> Egresos / Personal</DropdownItem>
                             <DropdownItem onClick={onNewAppointmentClick}><i className="mdi mdi-plus me-2"></i> Crear Nueva Cita</DropdownItem>
                         </DropdownMenu>
                     </Dropdown>
                 </div>
-                {loadingSession ? (
-                    <div className='text-center p-5'><Spinner /></div>
-                ) : cashSession ? (
+                {loadingSession ? ( <div className='text-center p-5'><Spinner /></div> ) : cashSession ? (
                     <>
                         <div className="mb-3"><Flatpickr className="form-control" value={selectedDate} onChange={([date]) => setSelectedDate(date as Date)} options={{ dateFormat: "Y-m-d", altInput: true, altFormat: "F j, Y" }} /></div>
                         <Input type="text" className="form-control" placeholder="Buscar por cliente o estilista..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
@@ -474,13 +270,10 @@ const CentroDeCitasDiarias = ({ events, onNewAppointmentClick }: CentroDeCitasDi
                                 <NavItem><NavLink className={classnames({ active: activeTab === 'factura' })} onClick={() => setActiveTab('factura')} style={{ cursor: 'pointer' }}>Factura</NavLink></NavItem>
                             </>
                         )}
-                        {/* Pestaña de Préstamo (requiere caja abierta) */}
                         {canGiveLoans && cashSession && ( <NavItem><NavLink className={classnames({ active: activeTab === 'prestamo' })} onClick={() => setActiveTab('prestamo')} style={{ cursor: 'pointer' }}>Préstamo</NavLink></NavItem> )}
-                        {/* Pestaña de Venta Personal (no requiere caja abierta) */}
                         {canSellToStaff && ( <NavItem><NavLink className={classnames({ active: activeTab === 'venta_personal' })} onClick={() => setActiveTab('venta_personal')} style={{ cursor: 'pointer' }}>Venta Personal</NavLink></NavItem> )}
                     </Nav>
                     <TabContent activeTab={activeTab} className="pt-3">
-                        {/* TU CÓDIGO ORIGINAL SIN CAMBIOS */}
                         <TabPane tabId="anticipo">
                             <div className="mb-3">
                                 <Label className="form-label">Estilista</Label>
@@ -510,8 +303,6 @@ const CentroDeCitasDiarias = ({ events, onNewAppointmentClick }: CentroDeCitasDi
                             </div>
                             <div className="mb-0"><Label className="form-label">Descripción</Label><Input type="textarea" rows={3} value={factura.description} onChange={(e) => setFactura(f => ({ ...f, description: e.target.value }))} placeholder="Detalle de la compra" /></div>
                         </TabPane>
-                        
-                        {/* PESTAÑA AÑADIDA PARA PRÉSTAMOS */}
                         <TabPane tabId="prestamo">
                             <Row>
                                 <Col md={12} className="mb-3">
@@ -551,8 +342,6 @@ const CentroDeCitasDiarias = ({ events, onNewAppointmentClick }: CentroDeCitasDi
                                 </div>
                             )}
                         </TabPane>
-                        
-                        {/* TU CÓDIGO ORIGINAL SIN CAMBIOS */}
                         <TabPane tabId="venta_personal">
                             <Row>
                                 <Col md={6} className="mb-3">
