@@ -22,8 +22,9 @@ import EcommerceProductDetail from "../pages/Ecommerce/EcommerceProducts/Ecommer
 // --- NUESTRO NUEVO COMPONENTE DE PUNTO DE VENTA ---
 import PointOfSale from "../pages/PointOfSale";
 
-// --- NUESTRO NUEVO COMPONENTE DE NÓMINA ---
-import PayrollPage from "../pages/Payroll"; // <-- 1. IMPORTAMOS NUESTRA PÁGINA
+// --- NUESTROS COMPONENTES DE NÓMINA ---
+import PayrollPage from "../pages/Payroll"; // Página de la lista de nóminas
+import PayrollPreview from "../pages/Payroll/PayrollPreview"; // <-- 1. IMPORTAMOS LA NUEVA VISTA DE DETALLE
 
 // Autenticación y Perfil
 import Login from "../pages/Authentication/Login";
@@ -54,10 +55,11 @@ const authProtectedRoutes = [
   { path: "/inventory/:id", component: <EcommerceProductDetail /> },
 
   // Nómina
-  { path: "/payroll", component: <PayrollPage /> }, // <-- 2. USAMOS NUESTRO COMPONENTE AQUÍ
-  { path: "/settings", component: <Settings /> },
+  { path: "/payroll", component: <PayrollPage /> }, // Ruta para la lista
+  { path: "/payroll/preview", component: <PayrollPreview /> }, // <-- 2. AÑADIMOS LA RUTA PARA LA VISTA PREVIA
   
-  // Perfil del usuario logueado
+  // Configuración y Perfil
+  { path: "/settings", component: <Settings /> },
   { path: "/profile", component: <UserProfile /> },
 
   // Redirección por defecto al entrar a la app
