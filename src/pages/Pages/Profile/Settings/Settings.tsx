@@ -12,6 +12,10 @@ import classnames from "classnames";
 import { jwtDecode } from "jwt-decode";
 import CreatableSelect from 'react-select/creatable';
 
+// --- NUEVO: Imports de Redux ---
+import { useDispatch } from 'react-redux';
+import { setSetupProgress } from '../../../../slices/Settings/settingsSlice';
+
 import progileBg from '../../../../assets/images/profile-bg.jpg';
 import avatar1 from '../../../../assets/images/users/avatar-1.jpg';
 import { api } from "../../../../services/api";
@@ -51,6 +55,18 @@ type Service = {
     duration_minutes: number;
     is_active?: boolean;
 };
+
+// --- AJUSTE: Se añaden helpers para formateo de moneda ---
+const formatterCOP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0, minimumFractionDigits: 0 });
+const onlyDigits = (v: string) => (v || '').replace(/\D+/g, '');
+const formatCOPString = (digits: string) => {
+    if (!digits) return '';
+    const n = parseInt(digits, 10);
+    if (!Number.isFinite(n)) return '';
+    // Quitamos el espacio que a veces añade Intl.NumberFormat (ej: "$ 50.000")
+    return formatterCOP.format(n).replace(/\s/g, '');
+};
+
 const DAYS: { key: DayKey; label: string }[] = [
     { key: "monday",    label: "Lunes" },
     { key: "tuesday",   label: "Martes" },
@@ -226,8 +242,25 @@ const ServiceModal: React.FC<{
                     </Col>
                     <Col md={6}><Label className="form-label">Nombre del servicio</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej: Corte para Dama" /></Col>
                     <Col md={6}><Label className="form-label">Duración (minutos)</Label><Input type="number" min={1} value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="Ej: 60" /></Col>
-                    <Col md={6}><Label className="form-label">Precio</Label><Input type="number" min={0} step="1" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Ej: 50000" /></Col>
-                    <Col md={12}><Label className="form-label">Descripción (opcional)</Label><Input type="textarea" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} /></Col>
+                    
+                    {/* --- AJUSTE: Campo de precio ahora ocupa todo el ancho (md={12}) y usa formato de moneda --- */}
+                    <Col md={12}>
+                        <Label className="form-label">Precio</Label>
+                        <Input 
+                            type="text" 
+                            inputMode="numeric"
+                            value={formatCOPString(price)} 
+                            onChange={(e) => setPrice(onlyDigits(e.target.value))} 
+                            placeholder="$50.000" 
+                        />
+                    </Col>
+
+                    {/* --- AJUSTE: Campo de descripción comentado para ocultarlo --- */}
+                    {/* <Col md={12}>
+                        <Label className="form-label">Descripción (opcional)</Label>
+                        <Input type="textarea" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
+                    </Col>
+                    */}
                 </Row>
             </ModalBody>
             <ModalFooter>
@@ -240,12 +273,12 @@ const ServiceModal: React.FC<{
 
 /* ================= Página Settings ================= */
 const Settings: React.FC = () => {
+    const dispatch = useDispatch();
     const [activeTab, setActiveTab] = useState<"1" | "2" | "3" | "4">("1");
     const [tenant, setTenant] = useState<Tenant | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [saving, setSaving] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
-    
     const [name, setName] = useState<string>("");
     const [phone, setPhone] = useState<string>("");
     const [address, setAddress] = useState<string>("");
@@ -258,11 +291,9 @@ const Settings: React.FC = () => {
     const [logoFile, setLogoFile] = useState<File | null>(null);
     const [uploadingLogo, setUploadingLogo] = useState<boolean>(false);
     const [perDay, setPerDay] = useState<WorkingHoursPerDay>(defaultWeek());
-    
     const [productsForStaff, setProductsForStaff] = useState<boolean>(true);
     const [adminFeeEnabled, setAdminFeeEnabled] = useState<boolean>(false);
     const [loansToStaff, setLoansToStaff] = useState<boolean>(false);
-
     const [catLoading, setCatLoading] = useState(false);
     const [svcLoading, setSvcLoading] = useState(false);
     const [categories, setCategories] = useState<Category[]>([]);
@@ -288,7 +319,7 @@ const Settings: React.FC = () => {
     const [staffLoading, setStaffLoading] = useState<boolean>(false);
     
     const tabChange = (tab: "1" | "2" | "3" | "4") => { if (activeTab !== tab) setActiveTab(tab); };
- 
+
     const updateStateFromTenant = (tenantData: Tenant | null) => {
         if (!tenantData) return;
         setTenant(tenantData);
@@ -403,7 +434,7 @@ const Settings: React.FC = () => {
     
     const handleSaveInfo = async (e?: React.FormEvent) => { e?.preventDefault(); await saveAll(); };
     const handleSaveHours = async (e?: React.FormEvent) => { e?.preventDefault(); await saveAll(); };
- 
+
     const openLogoPicker = () => { logoInputRef.current?.click(); };
     const onLogoInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const f = e.target.files?.[0];
@@ -412,7 +443,7 @@ const Settings: React.FC = () => {
         setLogoUrl(URL.createObjectURL(f));
       }
     };
- 
+
     const toggleDay = (day: DayKey) => setPerDay(prev => ({ ...prev, [day]: { ...prev[day], active: !prev[day].active } }));
     const changeHour = (day: DayKey, field: "start" | "end", value: string) =>
       setPerDay(prev => ({ ...prev, [day]: { ...prev[day], [field]: value } }));
@@ -427,7 +458,7 @@ const Settings: React.FC = () => {
         return next;
       });
     };
- 
+
     const tenantId = useMemo(() => decodeTenantId() || "", []);
     const loadCategories = async () => {
       if (!tenantId) return;
@@ -446,7 +477,7 @@ const Settings: React.FC = () => {
       catch (e: any) { setError(e?.response?.data?.message || e?.message || 'No se pudieron cargar los servicios'); }
       finally { setSvcLoading(false); }
     };
- 
+
     const loadStaffCount = async () => {
       if (!tenantId) return;
       setStaffLoading(true);
@@ -458,7 +489,7 @@ const Settings: React.FC = () => {
       }
       finally { setStaffLoading(false); }
     };
- 
+
     useEffect(() => {
       if (tenantId) {
         loadCategories();
@@ -466,7 +497,7 @@ const Settings: React.FC = () => {
         loadStaffCount();
       }
     }, [tenantId]);
- 
+
     const refreshAllServices = async () => { 
         await loadServices(); 
     };
@@ -500,7 +531,7 @@ const Settings: React.FC = () => {
             }
         }
     };
- 
+
     const progress = useMemo(() => {
       const datosOk = !!(name.trim() && address.trim() && phone.trim());
       const hasActive = DAYS.some(({ key }) => perDay[key].active);
@@ -511,7 +542,14 @@ const Settings: React.FC = () => {
       const score = (datosOk ? 1 : 0) + (horariosOk ? 1 : 0) + (serviciosOk ? 1 : 0) + (personalOk ? 1 : 0);
       return score * 25;
     }, [name, address, phone, perDay, services.length, staffCount]);
- 
+    
+    useEffect(() => {
+      if (!loading) {
+          dispatch(setSetupProgress(progress));
+      }
+  }, [progress, loading, dispatch]);
+
+
     const renderSvcPageNumbers = () => {
       if(totalSvcPages <= 1) return null;
       const windowSize = 5;
@@ -529,28 +567,26 @@ const Settings: React.FC = () => {
       return items;
     };
     
-    // --- NUEVOS MANEJADORES PARA EL GESTOR DE CATEGORÍAS DE SERVICIOS ---
     const handleUpdateServiceCategory = async (id: string, newName: string) => {
         try {
             await api.put(`/categories/${id}`, { name: newName });
             Swal.fire({ icon: 'success', title: '¡Actualizada!', text: 'La categoría ha sido actualizada.', timer: 1500, showConfirmButton: false });
-            await loadCategories(); // Recargamos para ver los cambios
+            await loadCategories();
         } catch(e: any) {
             Swal.fire('Error', e?.response?.data?.error || 'No se pudo actualizar la categoría', 'error');
         }
     };
 
     const handleDeleteServiceCategory = async (id: string) => {
-        // La confirmación ya se hace dentro del CategoryManagerModal
         try {
             await api.delete(`/categories/${id}`);
-            handleCategoryDeleted(id); // Usamos la función que ya teníamos para actualizar el estado
+            handleCategoryDeleted(id);
             Swal.fire({ icon: 'success', title: '¡Eliminada!', text: 'La categoría ha sido eliminada.', timer: 1500, showConfirmButton: false });
         } catch(e: any) {
             Swal.fire('Error', e?.response?.data?.error || 'No se pudo eliminar la categoría', 'error');
         }
     };
- 
+
     if (loading) {
       return (
         <div className="page-content">
@@ -558,7 +594,7 @@ const Settings: React.FC = () => {
         </div>
       );
     }
- 
+
     return (
       <React.Fragment>
         <div className="page-content">
@@ -688,9 +724,14 @@ const Settings: React.FC = () => {
                           onManageCategories={() => setCategoryManagerOpen(true)}
                         />
                       </TabPane>
-                      <TabPane tabId="4">
-                        <Personal />
-                      </TabPane>
+                      {/* --- AJUSTE: Pasamos `services` y `categories` como props a Personal --- */}
+                     <TabPane tabId="4">
+  <Personal 
+    services={services}
+    categories={categories}
+    onStaffChange={loadStaffCount} // <-- AÑADE ESTA LÍNEA
+  />
+</TabPane>
                     </TabContent>
                   </CardBody>
                 </Card>

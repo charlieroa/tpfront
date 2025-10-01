@@ -1,15 +1,21 @@
+// --- CAMBIO 1: Importamos nuestra API real en lugar del 'fakebackend' ---
+import { api } from '../../../services/api'; 
+
 import {
   registerTenantSuccessful,
   registerTenantFailed,
 } from './reducer';
 
-import { postRegisterTenantAdmin } from '../../../helpers/fakebackend_helper';
 
-export const registerTenant = (data: any) => async (dispatch: any) => {
+export const registerTenant = (tenantData: any) => async (dispatch: any) => {
   try {
-    const response = await postRegisterTenantAdmin(data);
-    dispatch(registerTenantSuccessful(response));
-  } catch (error) {
-    dispatch(registerTenantFailed(error));
+    const response = await api.post("/auth/register-tenant", tenantData);
+    dispatch(registerTenantSuccessful(response.data));
+  } catch (error: any) {
+    const errorMessage = error.response?.data?.error || "Ocurrió un error inesperado en el registro.";
+    
+   
+    
+    dispatch(registerTenantFailed(errorMessage));
   }
 };

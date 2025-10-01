@@ -1,6 +1,6 @@
 // =============================================
 // File: src/pages/Calendar/AppointmentModal.tsx
-// (Versión completa y refactorizada — FIX para pre‑carga en modo edición)
+// (Versión completa con FIX NaN:NaN en el select de Hora)
 // =============================================
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -67,6 +67,46 @@ const toHHmmLocal = (d: string | Date) => {
   const mm = String(dt.getMinutes()).padStart(2, "0");
   return `${hh}:${mm}`;
 };
+
+/**
+ * Normaliza lo que devuelva el thunk de slots a siempre ["HH:mm", ...]
+ * Soporta:
+ * - ["HH:mm", ...]  (nuevo backend en modo compat)
+ * - [{ local_time, utc, local }, ...] (si usas *_meta directo)
+ * - ["2025-09-22T14:00:00Z", ...] (ISO antiguo)
+ * - { slots: [...] } envoltorio
+ */
+function normalizeSlotsPayload(payload: any): string[] {
+  const raw = Array.isArray(payload) ? payload : (payload?.slots ?? payload?.data?.slots ?? []);
+
+  if (!Array.isArray(raw)) return [];
+
+  if (raw.length === 0) return [];
+
+  const first = raw[0];
+
+  // Caso 1: ya vienen como "HH:mm"
+  if (typeof first === "string" && first.length === 5 && first.includes(":")) {
+    return raw as string[];
+  }
+
+  // Caso 2: objetos con local_time
+  if (first && typeof first === "object" && "local_time" in first) {
+    return (raw as Array<{ local_time: string }>).map((s) => s.local_time);
+  }
+
+  // Caso 3: ISO strings -> convertir a HH:mm local
+  if (typeof first === "string") {
+    return (raw as string[]).map((iso) => toHHmmLocal(iso));
+  }
+
+  // Caso 4: objetos con 'utc' -> convertir a HH:mm local
+  if (first && typeof first === "object" && "utc" in first) {
+    return (raw as Array<{ utc: string }>).map((s) => toHHmmLocal(s.utc));
+  }
+
+  return [];
+}
 
 // =================================================================
 // --- INICIO DEL COMPONENTE ---
@@ -251,13 +291,15 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
       setIsLoadingTimeSlots(true);
       const dateStr = toYyyyMmDd(date);
       dispatch(fetchTenantSlots(dateStr, service_id))
-        .then((slots: string[]) => {
-          const fetched = slots.map((slot) => toHHmmLocal(new Date(slot)));
+        .then((payload: any) => {
+          // 🔧 FIX: normalizamos SIEMPRE a ["HH:mm"]
+          const fetched = normalizeSlotsPayload(payload);
+
           // Garantiza que el horario actual aparezca aunque ya no esté disponible
           const current = validation.values.start_time;
-          const merged = current && !fetched.includes(current)
-            ? [current, ...fetched]
-            : fetched;
+          const merged =
+            current && !fetched.includes(current) ? [current, ...fetched] : fetched;
+
           setTimeSlots(merged);
         })
         .catch(() => setTimeSlots([]))
@@ -294,7 +336,14 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
           const merged = hasCurrent
             ? stylists
             : currentId
-            ? [{ id: currentId, first_name: currentStylistLabel || "Actual", last_name: currentStylistLabel ? "" : "(asignado)" }, ...stylists]
+            ? [
+                {
+                  id: currentId,
+                  first_name: currentStylistLabel || "Actual",
+                  last_name: currentStylistLabel ? "" : "(asignado)",
+                },
+                ...stylists,
+              ]
             : stylists;
           setAvailableStylists(merged);
         })

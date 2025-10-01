@@ -1,14 +1,14 @@
 // src/slices/auth/login/thunk.ts
 
-// Helpers existentes (si sigues usando Firebase en otros entornos)
+// Helpers existentes
 import { getFirebaseBackend } from "../../../helpers/firebase_helper";
-// Legacy fake (solo si usas el modo "fake")
 import { postFakeLogin } from "../../../helpers/fakebackend_helper";
 
-// ✅ NUEVO: instancia única y helpers de token
+// Helpers de la API y Token
 import { api } from "../../../services/api";
 import { setToken, clearToken } from "../../../services/auth";
 
+// Acciones del Reducer
 import {
   loginSuccess,
   logoutUserSuccess,
@@ -18,20 +18,22 @@ import {
 
 type NavigateFn = (path: string) => void;
 
+// =================================================================
+// FUNCIÓN LOGINUSER (MODIFICADA)
+// =================================================================
 export const loginUser =
   (user: { email: string; password: string }, navigate: NavigateFn) =>
   async (dispatch: any) => {
     try {
       let data: any = null;
+      // --- CAMBIO 1: Declaramos una variable para guardar el estado de la configuración ---
+      let setup_complete = true; // Por defecto, asumimos que la configuración está completa
 
       if (process.env.REACT_APP_DEFAULTAUTH === "firebase") {
         const fireBaseBackend: any = getFirebaseBackend();
         data = await fireBaseBackend.loginUser(user.email, user.password);
-        // Si usas Firebase, maneja token según tu implementación
-        // setToken(fireBaseToken)
-        // sessionStorage.setItem("authUser", JSON.stringify(data));
+        
       } else if (process.env.REACT_APP_DEFAULTAUTH === "jwt") {
-        // ✅ Login real contra tu backend
         const res = await api.post("/auth/login", {
           email: user.email,
           password: user.password,
@@ -44,17 +46,19 @@ export const loginUser =
         // Guarda token para toda la app
         setToken(res.data.token);
 
-        // (Compat) guarda una mínima info en sessionStorage si el resto del template la usa
+        // --- CAMBIO 2: Capturamos el valor de 'setup_complete' desde la respuesta de la API ---
+        setup_complete = res.data.setup_complete;
+
         const authUser = {
           message: "Login Successful",
           token: res.data.token,
           user: res.data.user || { email: user.email },
+          setup_complete: setup_complete
         };
         sessionStorage.setItem("authUser", JSON.stringify(authUser));
 
         data = authUser;
       } else if (process.env.REACT_APP_DEFAULTAUTH === "fake") {
-        // Modo demo
         const finallogin: any = await postFakeLogin({
           email: user.email,
           password: user.password,
@@ -63,10 +67,8 @@ export const loginUser =
           throw finallogin || new Error("Login fake fallido");
         }
         data = finallogin.data;
-        // Si tu fake devuelve algo tipo { token }, podrías setToken(data.token)
         sessionStorage.setItem("authUser", JSON.stringify(data));
       } else {
-        // Fallback a fake si no está configurado DEFAULTAUTH
         const finallogin: any = await postFakeLogin({
           email: user.email,
           password: user.password,
@@ -78,9 +80,18 @@ export const loginUser =
         sessionStorage.setItem("authUser", JSON.stringify(data));
       }
 
-      // Éxito: actualiza store y navega
+      // Éxito: actualiza store
       dispatch(loginSuccess(data));
-      navigate ? navigate("/dashboard") : (window.location.href = "/dashboard");
+      
+      // --- CAMBIO 3: Usamos una lógica condicional para la navegación ---
+      if (navigate) {
+        if (setup_complete === false) {
+          navigate("/settings"); // Si la configuración no está completa, va a Settings
+        } else {
+          navigate("/dashboard"); // Si está completa, va al Dashboard
+        }
+      }
+
     } catch (error: any) {
       const msg =
         error?.response?.data?.message ||
@@ -91,11 +102,13 @@ export const loginUser =
     }
   };
 
+// =================================================================
+// OTRAS FUNCIONES (SIN CAMBIOS)
+// =================================================================
+
 export const logoutUser = () => async (dispatch: any) => {
   try {
-    // Limpia compat
     sessionStorage.removeItem("authUser");
-    // ✅ Limpia token real
     clearToken();
 
     if (process.env.REACT_APP_DEFAULTAUTH === "firebase") {
@@ -119,7 +132,6 @@ export const socialLogin =
         dispatch(loginSuccess(response));
         navigate ? navigate("/dashboard") : (window.location.href = "/dashboard");
       } else {
-        // Si no usas Firebase, indica que no está configurado
         throw new Error("Social login no está configurado en este entorno.");
       }
     } catch (error: any) {

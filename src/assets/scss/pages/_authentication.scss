@@ -36,10 +36,12 @@
     background-size: cover;
 
     .bg-overlay{
-        background: linear-gradient(to right, darken($primary, 6%), $primary);
-        opacity: 0.9;
+        background: linear-gradient(to right, #4c687b, #cd978f);
+    opacity: 0.9;
     }
 }
+
+  
 
 .shape{
     position: absolute;

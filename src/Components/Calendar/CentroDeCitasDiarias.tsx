@@ -67,7 +67,6 @@ const ModalAbrirCaja: React.FC<{ isOpen: boolean; onClose: () => void; onSession
     );
 };
 
-// === COMPONENTE DE CIERRE DE CAJA AJUSTADO A TU ESPECIFICACIÓN ===
 const ModalResumenCierre: React.FC<{ isOpen: boolean; onClose: () => void; onSessionClosed: () => void; sessionData: any | null; }> = ({ isOpen, onClose, onSessionClosed, sessionData }) => {
     const [saving, setSaving] = useState(false);
 
@@ -94,7 +93,6 @@ const ModalResumenCierre: React.FC<{ isOpen: boolean; onClose: () => void; onSes
     const handleCloseSession = async () => {
         try {
             setSaving(true);
-            // La llamada a la API ya no necesita enviar el monto contado
             await api.post('/cash/close', {});
             await Swal.fire({ title: '¡Caja Cerrada!', text: 'La sesión de caja se ha cerrado y archivado correctamente.', icon: 'success' });
             onSessionClosed();
@@ -140,7 +138,6 @@ const ModalResumenCierre: React.FC<{ isOpen: boolean; onClose: () => void; onSes
                     </Col>
                 </Row>
                 <hr />
-                {/* La sección de "Monto final contado en efectivo" ha sido ELIMINADA */}
                 <div className="bg-light p-3 rounded">
                     <div className="d-flex justify-content-between"><span className="text-muted">Base Inicial</span><span>{formatterCOP.format(summary.details.initial_amount)}</span></div>
                     <div className="d-flex justify-content-between mt-2"><span className="text-muted">(+) Ingresos en Efectivo</span><span className="text-success">{formatterCOP.format(summary.totalCashIncomes)}</span></div>
@@ -162,7 +159,6 @@ const ModalResumenCierre: React.FC<{ isOpen: boolean; onClose: () => void; onSes
 
 
 const CentroDeCitasDiarias = ({ events, onNewAppointmentClick }: CentroDeCitasDiariasProps) => {
-    // ... El resto de este componente está completo y sin cambios ...
     const navigate = useNavigate();
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());
     const [searchTerm, setSearchTerm] = useState<string>('');
@@ -186,9 +182,31 @@ const CentroDeCitasDiarias = ({ events, onNewAppointmentClick }: CentroDeCitasDi
     const [canGiveLoans, setCanGiveLoans] = useState(true);
     const [prestamo, setPrestamo] = useState({ stylist_id: '', amountDigits: '', weeks: '4', interest_percent: '5' });
     const [savingPrestamo, setSavingPrestamo] = useState(false);
+
     const toggleDropdown = () => setDropdownOpen(!dropdownOpen);
-    const fetchCurrentSession = async () => { try { setLoadingSession(true); const { data } = await api.get('/cash/current'); setCashSession(data); } catch (e) { console.error("Error cargando la sesión de caja", e); setCashSession(null); } finally { setLoadingSession(false); } };
+
+    // --- AJUSTE: Se agregó una alerta de error si la carga de la sesión falla ---
+    const fetchCurrentSession = async () => {
+        try {
+            setLoadingSession(true);
+            const { data } = await api.get('/cash/current');
+            setCashSession(data);
+        } catch (e: any) {
+            console.error("Error cargando la sesión de caja", e);
+            // Mostrar una alerta al usuario para que sepa que algo falló
+            Swal.fire({
+                icon: 'error',
+                title: 'Error de Conexión',
+                text: e?.response?.data?.error || 'No se pudo cargar la información de la sesión de caja. Revisa la consola del servidor backend.',
+            });
+            setCashSession(null);
+        } finally {
+            setLoadingSession(false);
+        }
+    };
+
     useEffect(() => { fetchCurrentSession(); }, []);
+
     const fetchPrerequisites = async () => {
         setLoadingStylists(true); setLoadingProducts(true);
         try {
@@ -210,7 +228,9 @@ const CentroDeCitasDiarias = ({ events, onNewAppointmentClick }: CentroDeCitasDi
         } catch (e) { console.error('Error cargando prerequisitos:', e); }
         finally { setLoadingStylists(false); setLoadingProducts(false); }
     };
+
     useEffect(() => { if (paymentsModalOpen) fetchPrerequisites(); }, [paymentsModalOpen]);
+
     const gruposPorCliente = useMemo<GrupoCliente[]>(() => { if (!cashSession) return []; const startOfDay = new Date(selectedDate); startOfDay.setHours(0, 0, 0, 0); const endOfDay = new Date(selectedDate); endOfDay.setHours(23, 59, 59, 999); const filtradas: CitaEvento[] = events.filter((event) => { const fechaCita = new Date(event.start); const enFecha = fechaCita >= startOfDay && fechaCita <= endOfDay; const esOperativa = event.extendedProps.status !== 'cancelled' && event.extendedProps.status !== 'completed'; if (!enFecha || !esOperativa) return false; if (searchTerm) { const q = searchTerm.toLowerCase(); return (event.extendedProps.client_first_name?.toLowerCase().includes(q) || event.extendedProps.client_last_name?.toLowerCase().includes(q) || event.extendedProps.stylist_first_name?.toLowerCase().includes(q)); } return true; }); const map = new Map<string | number, GrupoCliente>(); for (const ev of filtradas) { const ep = ev.extendedProps || {}; const clientId = ep.client_id ?? ep.clientId; if (clientId == null) continue; const item = { id: ev.id, service_name: ep.service_name, stylist_first_name: ep.stylist_first_name, start_time: ep.start_time ?? ev.start, }; if (!map.has(clientId)) { map.set(clientId, { clientId, client_first_name: ep.client_first_name, client_last_name: ep.client_last_name, earliestStartISO: item.start_time, count: 1, appointments: [item], }); } else { const g = map.get(clientId)!; g.appointments.push(item); g.count += 1; if (new Date(item.start_time).getTime() < new Date(g.earliestStartISO).getTime()) { g.earliestStartISO = item.start_time; } } } return Array.from(map.values()).sort((a, b) => new Date(a.earliestStartISO).getTime() - new Date(b.earliestStartISO).getTime()); }, [events, selectedDate, searchTerm, cashSession]);
     const handleOpenPayments = () => { if (cashSession) { setActiveTab('anticipo'); } else if(canSellToStaff) { setActiveTab('venta_personal'); } setPaymentsModalOpen(true); };
     const handleNewSale = () => { navigate('/checkout'); };
@@ -224,6 +244,7 @@ const CentroDeCitasDiarias = ({ events, onNewAppointmentClick }: CentroDeCitasDi
     const handleSaveVentaPersonal = async () => { if (!ventaPersonal.stylist_id || ventaPersonal.cart.length === 0) { Swal.fire('Datos incompletos', 'Debes seleccionar un estilista y añadir al menos un producto.', 'warning'); return; } setSavingVenta(true); try { const payload = { stylist_id: ventaPersonal.stylist_id, payment_terms_weeks: paymentPlan.weeks, items: ventaPersonal.cart.map(item => ({ product_id: item.productId, quantity: item.quantity, price_at_sale: item.price })) }; await api.post('/staff-purchases', payload); Swal.fire('¡Venta Registrada!', 'La compra se ha registrado como un adelanto de nómina.', 'success'); setPaymentsModalOpen(false); setVentaPersonal({ stylist_id: '', cart: [], total: 0, payment_terms_weeks: 1 }); setPaymentEndDate(null); } catch (e: any) { Swal.fire('Error', e?.response?.data?.error || 'No se pudo registrar la venta.', 'error'); } finally { setSavingVenta(false); } };
     const prestamoSummary = useMemo(() => { const principal = parseInt(prestamo.amountDigits || '0', 10); const weeks = parseInt(prestamo.weeks || '0', 10); const interestRate = parseFloat(prestamo.interest_percent || '0'); if (!principal || !weeks || isNaN(interestRate) || interestRate < 0) { return { totalInterest: 0, totalToRepay: 0, weeklyInstallment: 0, isValid: false }; } const totalInterest = principal * (interestRate / 100); const totalToRepay = principal + totalInterest; const weeklyInstallment = totalToRepay / weeks; return { totalInterest, totalToRepay, weeklyInstallment, isValid: true }; }, [prestamo.amountDigits, prestamo.weeks, prestamo.interest_percent]);
     const handleSavePrestamo = async () => { if (!prestamo.stylist_id || !prestamoSummary.isValid) { Swal.fire('Datos incompletos', 'Completa todos los campos del préstamo correctamente.', 'warning'); return; } setSavingPrestamo(true); try { const payload = { stylist_id: prestamo.stylist_id, principal_amount: parseInt(prestamo.amountDigits, 10), weeks: parseInt(prestamo.weeks, 10), interest_percent: parseFloat(prestamo.interest_percent), disburse_from_cash: true, }; await api.post('/staff-loans', payload); Swal.fire('¡Préstamo Registrado!', 'El préstamo ha sido creado y el egreso se registró en caja.', 'success'); setPaymentsModalOpen(false); setPrestamo({ stylist_id: '', amountDigits: '', weeks: '4', interest_percent: '5' }); fetchCurrentSession(); } catch (e: any) { Swal.fire('Error', e?.response?.data?.error || 'No se pudo registrar el préstamo.', 'error'); } finally { setSavingPrestamo(false); } };
+    
     return (
         <Card>
             <CardBody>

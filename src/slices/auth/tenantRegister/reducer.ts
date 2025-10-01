@@ -16,6 +16,9 @@ const tenantRegisterSlice = createSlice({
       state.registrationError = null;
     },
     registerTenantFailed(state, action) {
+      // --- AÑADE ESTE CONSOLE.LOG ---
+
+
       state.registrationSuccess = null;
       state.registrationError = action.payload;
     },

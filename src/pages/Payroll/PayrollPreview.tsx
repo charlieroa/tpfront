@@ -4,21 +4,19 @@ import CountUp from 'react-countup';
 import { api } from '../../services/api';
 import { Spinner } from 'reactstrap';
 import Swal from 'sweetalert2';
-import classnames from 'classnames';
 
 // --- INTERFACES Y TIPOS ---
 interface WidgetData { label: string; icon: string; counter: number; prefix?: string; badge: string; separator?: string; duration?: number; }
-interface Client { id: string; name: string; service: string; value: number; }
-interface InventoryItem { id: string; product: string; commission: number; }
-interface Expense { id: string; description: string; amount: number; }
+interface Client { client_name: string; service_name: string; service_price: number; net_commission: number; admin_fee: number; }
+interface InventoryItem { product_name: string; commission_value: number; }
+interface Expense { description: string; amount: number; }
 interface Stylist { id: string; name: string; avatar: string; netToPay: number; clients: Client[]; inventory: InventoryItem[]; expenses: Expense[]; }
 interface ApiSummaryWidgets { cash: number; creditCard: number; inventorySold: number; stylistExpenses: number; }
-interface ApiStylistDetail { stylist_id: string; stylist_name: string; net_paid: number; details: { services: any[]; products: any[]; expenses: any[]; } }
+interface ApiStylistDetail { stylist_id: string; stylist_name: string; net_paid: number; details: { services: Client[]; products: InventoryItem[]; expenses: Expense[]; } }
 
 // --- FORMATEADOR Y COMPONENTES ---
 const formatterCOP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0, minimumFractionDigits: 0 });
 
-// ✅ Componente BreadCrumb completo (sin placeholders).
 const BreadCrumb = ({ title, pageTitle, onBack }: { title: string, pageTitle: string, onBack?: () => void }) => (
     <div className="mb-4 d-flex align-items-center">
         {onBack && ( <button onClick={onBack} className="btn btn-light me-3" style={{ border: '1px solid #dee2e6' }}><i className="ri-arrow-left-line"></i> Volver</button> )}
@@ -26,13 +24,12 @@ const BreadCrumb = ({ title, pageTitle, onBack }: { title: string, pageTitle: st
     </div>
 );
 
-// ✅ Componente PayrollWidgets completo (sin placeholders).
 const PayrollWidgets = ({ summary }: { summary: ApiSummaryWidgets }) => {
     const widgetsData: WidgetData[] = [
         { label: "Total Efectivo", icon: "ri-cash-line", counter: summary.cash, prefix: "$", badge: "ri-arrow-up-s-line text-success", separator: "." },
         { label: "Total Tarjetas", icon: "ri-bank-card-line", counter: summary.creditCard, prefix: "$", badge: "ri-arrow-up-s-line text-success", separator: "." },
         { label: "Inventario Vendido", icon: "ri-shopping-bag-line", counter: summary.inventorySold, prefix: "$", badge: "ri-arrow-up-s-line text-success", separator: "." },
-        { label: "Egresos Estilistas", icon: "ri-arrow-up-down-line", counter: summary.stylistExpenses, prefix: "$", badge: "ri-arrow-down-s-line text-danger", separator: "." },
+        { label: "Egresos Estilistas", icon: "ri-arrow-up-down-line", counter: Math.abs(summary.stylistExpenses), prefix: "$", badge: "ri-arrow-down-s-line text-danger", separator: "." },
     ];
     return (
         <div className="card crm-widget">
@@ -50,7 +47,9 @@ const PayrollWidgets = ({ summary }: { summary: ApiSummaryWidgets }) => {
 };
 
 const TabPagination = ({ currentPage, totalPages, onPageChange }: { currentPage: number, totalPages: number, onPageChange: (page: number) => void }) => {
-    if (totalPages <= 1) return null;
+    if (totalPages <= 1) {
+        return null;
+    }
     const pageNumbers = Array.from({ length: totalPages }, (_, i) => i + 1);
     return (
         <nav className="mt-2">
@@ -98,33 +97,21 @@ const PayrollPreview = () => {
         const fetchDetailedPreviewData = async () => {
             try {
                 setLoading(true);
+                setError(null);
                 const response = await api.get<{ summary_widgets: ApiSummaryWidgets, stylist_breakdowns: ApiStylistDetail[] }>(`/payrolls/detailed-preview?start_date=${startDateParam}&end_date=${endDateParam}`);
                 const { summary_widgets, stylist_breakdowns } = response.data;
 
                 const formattedStylists: Stylist[] = stylist_breakdowns.map(s => {
                     const nameParts = s.stylist_name.split(' ');
-                    const initials = `${nameParts[0][0]}${nameParts.length > 1 ? nameParts[1][0] : ''}`;
+                    const initials = `${nameParts[0][0]}${nameParts.length > 1 ? nameParts[1][0] : ''}`.toUpperCase();
                     return {
                         id: s.stylist_id,
                         name: s.stylist_name,
                         netToPay: s.net_paid,
                         avatar: `https://placehold.co/100x100/EFEFEF/333333?text=${initials}`,
-                        clients: s.details.services.map((service: any, index: number) => ({
-                            id: `c-${index}`,
-                            name: service.client_name,
-                            service: service.service_name,
-                            value: service.value,
-                        })),
-                        inventory: s.details.products.map((prod: any, index: number) => ({
-                            id: `i-${index}`,
-                            product: prod.product_name,
-                            commission: prod.commission_value,
-                        })),
-                        expenses: s.details.expenses.map((exp: any, index: number) => ({
-                            id: `e-${index}`,
-                            description: exp.description,
-                            amount: exp.amount,
-                        })),
+                        clients: s.details.services,
+                        inventory: s.details.products,
+                        expenses: s.details.expenses,
                     };
                 });
                 
@@ -135,7 +122,6 @@ const PayrollPreview = () => {
                     setSelectedStylist(formattedStylists[0]);
                 }
             } catch (err: any) {
-                console.error("Error fetching detailed preview:", err);
                 const errorMsg = err.response?.data?.error || "No se pudo cargar el detalle de la nómina.";
                 setError(errorMsg);
             } finally {
@@ -186,20 +172,18 @@ const PayrollPreview = () => {
     const visibleStylists = allStylistsData.slice(0, displayCount);
 
     const ITEMS_PER_PAGE = 5;
-    const indexOfLastService = servicesPage * ITEMS_PER_PAGE;
-    const indexOfFirstService = indexOfLastService - ITEMS_PER_PAGE;
-    const currentServices = selectedStylist?.clients.slice(indexOfFirstService, indexOfLastService) || [];
+
+    // Paginación para Servicios
     const totalServicePages = selectedStylist ? Math.ceil(selectedStylist.clients.length / ITEMS_PER_PAGE) : 0;
+    const currentServices = selectedStylist?.clients.slice((servicesPage - 1) * ITEMS_PER_PAGE, servicesPage * ITEMS_PER_PAGE) || [];
     
-    const indexOfLastProduct = productsPage * ITEMS_PER_PAGE;
-    const indexOfFirstProduct = indexOfLastProduct - ITEMS_PER_PAGE;
-    const currentProducts = selectedStylist?.inventory.slice(indexOfFirstProduct, indexOfLastProduct) || [];
+    // Paginación para Productos
     const totalProductPages = selectedStylist ? Math.ceil(selectedStylist.inventory.length / ITEMS_PER_PAGE) : 0;
-    
-    const indexOfLastExpense = expensesPage * ITEMS_PER_PAGE;
-    const indexOfFirstExpense = indexOfLastExpense - ITEMS_PER_PAGE;
-    const currentExpenses = selectedStylist?.expenses.slice(indexOfFirstExpense, indexOfLastExpense) || [];
+    const currentProducts = selectedStylist?.inventory.slice((productsPage - 1) * ITEMS_PER_PAGE, productsPage * ITEMS_PER_PAGE) || [];
+
+    // Paginación para Egresos
     const totalExpensePages = selectedStylist ? Math.ceil(selectedStylist.expenses.length / ITEMS_PER_PAGE) : 0;
+    const currentExpenses = selectedStylist?.expenses.slice((expensesPage - 1) * ITEMS_PER_PAGE, expensesPage * ITEMS_PER_PAGE) || [];
 
     const totalPayroll = allStylistsData.reduce((sum, stylist) => sum + stylist.netToPay, 0);
     const periodTitle = startDateParam && endDateParam ? `Período del ${startDateParam} al ${endDateParam}` : "Detalle de Período";
@@ -208,7 +192,7 @@ const PayrollPreview = () => {
     if (error) { return <div className="page-content text-center"><div className="alert alert-danger">{error}</div></div>; }
 
     return (
-        <div className="page-content" style={{ fontFamily: 'sans-serif', padding: '20px', backgroundColor: '#f5f7fa' }}>
+        <div className="page-content" style={{ padding: '20px', backgroundColor: '#f5f7fa' }}>
             <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
                 <BreadCrumb title="Vista Previa de Nómina" pageTitle={periodTitle} onBack={handleBack} />
                 {periodSummary && <PayrollWidgets summary={periodSummary} />}
@@ -228,7 +212,10 @@ const PayrollPreview = () => {
                                            setExpensesPage(1);
                                            setActiveTab('clients');
                                        }}>
-                                        <div className="d-flex align-items-center"><img src={stylist.avatar} alt={stylist.name} className="rounded-circle me-3" style={{ width: '40px', height: '40px' }}/><span>{stylist.name}</span></div>
+                                        <div className="d-flex align-items-center">
+                                            <img src={stylist.avatar} alt={stylist.name} className="rounded-circle me-3" style={{ width: '40px', height: '40px' }}/>
+                                            <span>{stylist.name}</span>
+                                        </div>
                                         <span className={`badge ${selectedStylist?.id === stylist.id ? 'bg-white text-primary' : 'bg-light text-dark'}`}>{formatterCOP.format(stylist.netToPay)}</span>
                                     </a>
                                 ))}
@@ -244,9 +231,75 @@ const PayrollPreview = () => {
                                         <li className="nav-item"><a className={`nav-link ${activeTab === 'expenses' ? 'active' : ''}`} onClick={() => setActiveTab('expenses')} href="#!">Egresos ({selectedStylist.expenses.length})</a></li>
                                     </ul>
                                     <div className="tab-content p-3 border border-top-0">
-                                        {activeTab === 'clients' && (<div><table className="table" style={{minHeight: "220px"}}><thead><tr><th>Cliente</th><th>Servicio</th><th className='text-end'>Valor</th></tr></thead><tbody>{currentServices.map(c => <tr key={c.id}><td>{c.name}</td><td>{c.service}</td><td className='text-end'>{formatterCOP.format(c.value)}</td></tr>)} {selectedStylist.clients.length === 0 && <tr><td colSpan={3} className="text-center text-muted pt-4">No hay servicios en este período.</td></tr>}</tbody></table><TabPagination currentPage={servicesPage} totalPages={totalServicePages} onPageChange={setServicesPage} /></div>)}
-                                        {activeTab === 'inventory' && (<div><table className="table" style={{minHeight: "220px"}}><thead><tr><th>Producto</th><th className='text-end'>Comisión Ganada</th></tr></thead><tbody>{currentProducts.map(i => <tr key={i.id}><td>{i.product}</td><td className='text-end'>{formatterCOP.format(i.commission)}</td></tr>)} {selectedStylist.inventory.length === 0 && <tr><td colSpan={2} className="text-center text-muted pt-4">No hay productos vendidos en este período.</td></tr>}</tbody></table><TabPagination currentPage={productsPage} totalPages={totalProductPages} onPageChange={setProductsPage} /></div>)}
-                                        {activeTab === 'expenses' && (<div><table className="table" style={{minHeight: "220px"}}><thead><tr><th>Descripción</th><th className='text-end'>Monto</th></tr></thead><tbody>{currentExpenses.map(e => <tr key={e.id}><td>{e.description}</td><td className='text-end'>-{formatterCOP.format(e.amount)}</td></tr>)} {selectedStylist.expenses.length === 0 && <tr><td colSpan={2} className="text-center text-muted pt-4">No hay egresos en este período.</td></tr>}</tbody></table><TabPagination currentPage={expensesPage} totalPages={totalExpensePages} onPageChange={setExpensesPage} /></div>)}
+                                        {activeTab === 'clients' && (
+                                            <div>
+                                                <table className="table" style={{minHeight: "220px"}}>
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Cliente</th>
+                                                            <th>Servicio</th>
+                                                            <th className='text-end'>Precio Servicio</th>
+                                                            <th className='text-end'>Comisión Neta Ganada</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {currentServices.map((c: Client, index: number) => (
+                                                            <tr key={`client-${index}`}>
+                                                                <td>{c.client_name}</td>
+                                                                <td>{c.service_name}</td>
+                                                                <td className='text-end'>{formatterCOP.format(c.service_price)}</td>
+                                                                <td className='text-end fw-bold text-success'>
+                                                                    {formatterCOP.format(c.net_commission)}
+                                                                    {c.admin_fee > 0 && 
+                                                                        <p className='text-muted fw-normal mb-0' style={{fontSize: '11px'}}>
+                                                                            (Desc. Admin: -{formatterCOP.format(c.admin_fee)})
+                                                                        </p>
+                                                                    }
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                        {selectedStylist.clients.length === 0 && (
+                                                            <tr><td colSpan={4} className="text-center text-muted pt-4">No hay servicios en este período.</td></tr>
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                                <TabPagination currentPage={servicesPage} totalPages={totalServicePages} onPageChange={setServicesPage} />
+                                            </div>
+                                        )}
+                                        {activeTab === 'inventory' && (
+                                            <div>
+                                                <table className="table" style={{minHeight: "220px"}}>
+                                                    <thead><tr><th>Producto</th><th className='text-end'>Comisión Ganada</th></tr></thead>
+                                                    <tbody>
+                                                        {currentProducts.map((p: InventoryItem, index: number) => (
+                                                            <tr key={`product-${index}`}>
+                                                                <td>{p.product_name}</td>
+                                                                <td className='text-end'>{formatterCOP.format(p.commission_value)}</td>
+                                                            </tr>
+                                                        ))}
+                                                        {selectedStylist.inventory.length === 0 && <tr><td colSpan={2} className="text-center text-muted pt-4">No hay productos vendidos en este período.</td></tr>}
+                                                    </tbody>
+                                                </table>
+                                                <TabPagination currentPage={productsPage} totalPages={totalProductPages} onPageChange={setProductsPage} />
+                                            </div>
+                                        )}
+                                        {activeTab === 'expenses' && (
+                                            <div>
+                                                <table className="table" style={{minHeight: "220px"}}>
+                                                    <thead><tr><th>Descripción</th><th className='text-end'>Monto</th></tr></thead>
+                                                    <tbody>
+                                                        {currentExpenses.map((e: Expense, index: number) => (
+                                                            <tr key={`expense-${index}`}>
+                                                                <td>{e.description}</td>
+                                                                <td className='text-end text-danger'>-{formatterCOP.format(e.amount)}</td>
+                                                            </tr>
+                                                        ))}
+                                                        {selectedStylist.expenses.length === 0 && <tr><td colSpan={2} className="text-center text-muted pt-4">No hay egresos en este período.</td></tr>}
+                                                    </tbody>
+                                                </table>
+                                                <TabPagination currentPage={expensesPage} totalPages={totalExpensePages} onPageChange={setExpensesPage} />
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             ) : (
@@ -255,19 +308,19 @@ const PayrollPreview = () => {
                         </div>
                     </div></div>
                 </div>
-                <div className="card mt-4"><div className="card-body d-flex justify-content-between align-items-center">
-                    <div><h4 className="card-title mb-0">Total a Pagar de Nómina</h4><p className="text-muted mb-0">Costo total para el salón en este período.</p></div>
-                    <div className="text-end">
-                        <h2 className="text-success me-3 d-inline-block align-middle">{formatterCOP.format(totalPayroll)}</h2>
-                        <button className="btn btn-light me-2" onClick={handleBack}>
-                            Volver al Listado
-                        </button>
-                        <button className="btn btn-success" onClick={handleGenerateAndSave} disabled={isSaving || allStylistsData.length === 0}>
-                            {isSaving ? <Spinner size="sm" className="me-2"/> : <i className="ri-save-line me-1"></i>}
-                            {isSaving ? 'Guardando...' : 'Generar y Guardar Nómina'}
-                        </button>
+                <div className="card mt-4">
+                    <div className="card-body d-flex justify-content-between align-items-center">
+                        <div><h4 className="card-title mb-0">Total a Pagar de Nómina</h4><p className="text-muted mb-0">Costo total para el salón en este período.</p></div>
+                        <div className="text-end">
+                            <h2 className="text-success me-3 d-inline-block align-middle">{formatterCOP.format(totalPayroll)}</h2>
+                            <button className="btn btn-light me-2" onClick={handleBack}>Volver al Listado</button>
+                            <button className="btn btn-success" onClick={handleGenerateAndSave} disabled={isSaving || allStylistsData.length === 0}>
+                                {isSaving ? <Spinner size="sm" className="me-2"/> : <i className="ri-save-line me-1"></i>}
+                                {isSaving ? 'Guardando...' : 'Generar y Guardar Nómina'}
+                            </button>
+                        </div>
                     </div>
-                </div></div>
+                </div>
             </div>
         </div>
     );

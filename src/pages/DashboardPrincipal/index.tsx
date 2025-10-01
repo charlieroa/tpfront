@@ -39,7 +39,9 @@ const DashboardPrincipal: React.FC<IProps> = () => {
                                 <i className="ri-calendar-2-line me-1"></i> Calendario y Caja
                             </NavLink>
                         </NavItem>
-                        <NavItem>
+
+                        {/* --- BOTÓN DE NAVEGACIÓN DE REPORTES COMENTADO --- */}
+                        {/* <NavItem>
                             <NavLink
                                 style={{ cursor: "pointer" }}
                                 className={classnames({ active: activeTab === '2' })}
@@ -48,6 +50,7 @@ const DashboardPrincipal: React.FC<IProps> = () => {
                                 <i className="ri-bar-chart-2-line me-1"></i> Reportes
                             </NavLink>
                         </NavItem>
+                        */}
                     </Nav>
 
                     {/* El contenido de las pestañas */}
@@ -56,10 +59,12 @@ const DashboardPrincipal: React.FC<IProps> = () => {
                             {/* Renderizamos el componente del Calendario */}
                             <Calendar />
                         </TabPane>
-                        <TabPane tabId="2">
-                            {/* Renderizamos los reportes del DashboardCrm */}
+
+                        {/* --- CONTENIDO DE REPORTES COMENTADO --- */}
+                        {/* <TabPane tabId="2">
                             <DashboardCrm /> 
                         </TabPane>
+                        */}
                     </TabContent>
                 </Container>
             </div>

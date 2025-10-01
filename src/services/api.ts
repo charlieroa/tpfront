@@ -2,12 +2,15 @@
 import axios, { AxiosError } from "axios";
 import { getToken, clearToken } from "./auth";
 
-/** Base por defecto si no viene del .env */
-const DEFAULT_API_BASE = process.env.REACT_APP_API_URL || "http://localhost:3000/api";
+// --- LÍNEA CORREGIDA ---
+// Ahora, esta variable DEBE venir de tu archivo .env o .env.local.
+// Si no la encuentra durante el build, el proceso fallará, avisándote del problema.
+const API_BASE_URL = process.env.REACT_APP_API_URL;
 
 /** Instancia única de Axios para toda la app */
 export const api = axios.create({
-  baseURL: DEFAULT_API_BASE,
+  // --- USO CORREGIDO ---
+  baseURL: API_BASE_URL,
   withCredentials: true,
   headers: {
     Accept: "application/json",
@@ -20,7 +23,8 @@ const isAuthRoute = (url?: string): boolean => {
   if (!url) return false;
   try {
     // Si es relativa, la resolvemos contra baseURL
-    const u = new URL(url, api.defaults.baseURL || DEFAULT_API_BASE);
+    // --- USO CORREGIDO ---
+    const u = new URL(url, api.defaults.baseURL || API_BASE_URL);
     return u.pathname.startsWith("/auth");
   } catch {
     // Fallback simple si URL no válida

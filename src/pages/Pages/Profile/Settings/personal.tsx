@@ -1,7 +1,8 @@
-// --- NUEVO: Importaciones de SweetAlert2 ---
+// Archivo: src/pages/Settings/personal.tsx (Asegúrate de que la ruta sea correcta)
+
+// --- Importaciones ---
 import Swal from 'sweetalert2';
 import 'sweetalert2/dist/sweetalert2.min.css';
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Button, Spinner, Table, Badge, Modal, ModalHeader, ModalBody, ModalFooter,
@@ -15,7 +16,7 @@ import { api } from "../../../../services/api";
 import { getToken } from "../../../../services/auth";
 
 /* =========================
-   Tipos (Sin cambios)
+   Tipos
 ========================= */
 type PaymentType = "salary" | "commission";
 
@@ -33,8 +34,8 @@ type Staff = {
   commission_rate?: number | null;
 };
 
+// --- AJUSTE: Estos tipos ahora vendrán como props, pero los mantenemos para referencia ---
 type Category = { id: string; name: string; created_at?: string; updated_at?: string; };
-
 type Service = {
   id: string;
   tenant_id?: string;
@@ -47,13 +48,19 @@ type Service = {
 };
 
 type AssignedSvc = { id: string; name: string };
-
 type DayKey = "lunes" | "martes" | "miercoles" | "jueves" | "viernes" | "sabado" | "domingo";
 type DayState = { active: boolean; open: string; close: string };
 type WeekState = Record<DayKey, DayState>;
 
+// --- AJUSTE: Definimos las props que el componente recibirá desde Settings.tsx ---
+interface PersonalProps {
+  services: Service[];
+  categories: Category[];
+   onStaffChange: () => void;
+}
+
 /* =========================
-   Helpers generales (Sin cambios)
+   Helpers
 ========================= */
 const decodeTenantId = (): string | null => {
     try {
@@ -62,97 +69,94 @@ const decodeTenantId = (): string | null => {
       const decoded: any = jwtDecode(t);
       return decoded?.user?.tenant_id || decoded?.tenant_id || null;
     } catch { return null; }
-  };
+};
   
 const formatCOP = (raw: string): string => {
-const digits = (raw || "").replace(/\D/g, "");
-if (!digits) return "";
-const n = Number(digits);
-try {
-    return `$${new Intl.NumberFormat("es-CO").format(n)}`;
-} catch {
-    return `$${digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`;
-}
+    const digits = (raw || "").replace(/\D/g, "");
+    if (!digits) return "";
+    const n = Number(digits);
+    try {
+        return `$${new Intl.NumberFormat("es-CO").format(n)}`;
+    } catch {
+        return `$${digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`;
+    }
 };
 
 const parseCOPToNumber = (masked: string): number => {
-const digits = (masked || "").replace(/\D/g, "");
-return digits ? Number(digits) : 0;
+    const digits = (masked || "").replace(/\D/g, "");
+    return digits ? Number(digits) : 0;
 };
 
 const formatPercent = (raw: string): string => {
-let s = (raw || "").trim().replace(/\s+/g, "");
-if (!s) return "";
-if (s.endsWith("%")) s = s.slice(0, -1);
-const val = Number(s);
-if (!isFinite(val)) return "";
-const pct = val <= 1 ? val * 100 : val;
-const clean = Math.max(0, Math.min(100, pct));
-const shown = Number.isInteger(clean) ? `${clean}` : clean.toFixed(2);
-return `${shown}%`;
+    const digits = (raw || "").replace(/[^\d.,]/g, "").replace(",", ".");
+    if (!digits) return "";
+    const val = parseFloat(digits);
+    if (!isFinite(val)) return "";
+    const clean = Math.max(0, Math.min(100, val));
+    const shown = Number.isInteger(clean) ? `${clean}` : clean.toFixed(2).replace(/\.?0+$/, "");
+    return `${shown}%`;
 };
 
 const parsePercentToDecimal = (masked: string): number | null => {
-let s = (masked || "").trim();
-if (!s) return null;
-if (s.endsWith("%")) {
-    const n = Number(s.slice(0, -1));
+    let s = (masked || "").trim();
+    if (!s) return null;
+    if (s.endsWith("%")) {
+        s = s.slice(0, -1);
+    }
+    const n = parseFloat(s.replace(",", "."));
     if (!isFinite(n)) return null;
     return Math.max(0, Math.min(100, n)) / 100;
-}
-const n = Number(s);
-if (!isFinite(n)) return null;
-return n <= 1 ? n : n / 100;
 };
+
 
 const pad2 = (n: number) => (n < 10 ? `0${n}` : `${n}`);
 const toTime = (raw: string): string => {
-const s = (raw || "").trim();
-if (!s) return "09:00";
-const [hStr, mStr] = s.split(":");
-const h = Math.max(0, Math.min(23, Number(hStr || "0")));
-const m = Math.max(0, Math.min(59, Number(mStr ?? "0")));
-return `${pad2(h)}:${pad2(m)}`;
+    const s = (raw || "").trim();
+    if (!s) return "09:00";
+    const [hStr, mStr] = s.split(":");
+    const h = Math.max(0, Math.min(23, Number(hStr || "0")));
+    const m = Math.max(0, Math.min(59, Number(mStr ?? "0")));
+    return `${pad2(h)}:${pad2(m)}`;
 };
 
 const DEFAULT_DAY: DayState = { active: false, open: "09:00", close: "17:00" };
 
 const defaultWeek = (): WeekState => ({
-lunes: 	{ ...DEFAULT_DAY },
-martes: 	{ ...DEFAULT_DAY },
-miercoles: { ...DEFAULT_DAY },
-jueves: 	{ ...DEFAULT_DAY },
-viernes: 	{ ...DEFAULT_DAY },
-sabado: 	{ ...DEFAULT_DAY },
-domingo: 	{ ...DEFAULT_DAY },
+    lunes:   { ...DEFAULT_DAY },
+    martes:   { ...DEFAULT_DAY },
+    miercoles: { ...DEFAULT_DAY },
+    jueves:   { ...DEFAULT_DAY },
+    viernes:  { ...DEFAULT_DAY },
+    sabado:   { ...DEFAULT_DAY },
+    domingo:  { ...DEFAULT_DAY },
 });
 
 const DAYS_UI: { key: DayKey; label: string }[] = [
-{ key: "lunes", 	label: "Lunes" },
-{ key: "martes", 	label: "Martes" },
-{ key: "miercoles", label: "Miércoles" },
-{ key: "jueves", 	label: "Jueves" },
-{ key: "viernes", 	label: "Viernes" },
-{ key: "sabado", 	label: "Sábado" },
-{ key: "domingo", 	label: "Domingo" },
+    { key: "lunes",   label: "Lunes" },
+    { key: "martes",  label: "Martes" },
+    { key: "miercoles", label: "Miércoles" },
+    { key: "jueves",  label: "Jueves" },
+    { key: "viernes",   label: "Viernes" },
+    { key: "sabado",  label: "Sábado" },
+    { key: "domingo",   label: "Domingo" },
 ];
 
 const validateWeek = (week: WeekState): string | null => {
-for (const { key, label } of DAYS_UI) {
-    const d = week[key];
-    if (d.active) {
-    const [sh, sm] = toTime(d.open).split(":").map(Number);
-    const [eh, em] = toTime(d.close).split(":").map(Number);
-    if (eh * 60 + em <= sh * 60 + sm) {
-        return `El horario de ${label} es inválido: fin debe ser mayor que inicio.`;
+    for (const { key, label } of DAYS_UI) {
+        const d = week[key];
+        if (d.active) {
+            const [sh, sm] = toTime(d.open).split(":").map(Number);
+            const [eh, em] = toTime(d.close).split(":").map(Number);
+            if (eh * 60 + em <= sh * 60 + sm) {
+                return `El horario de ${label} es inválido: fin debe ser mayor que inicio.`;
+            }
+        }
     }
-    }
-}
-return null;
+    return null;
 };
 
 /* =========================
-   Componentes
+   Componentes Anidados
 ========================= */
 const ServiceMultiSelect: React.FC<{
     services: Service[];
@@ -162,7 +166,6 @@ const ServiceMultiSelect: React.FC<{
     catFilter: string | "all";
     onCatFilter: (id: string | "all") => void;
   }> = ({ services, categories, selectedIds, onToggle, catFilter, onCatFilter }) => {
-    // ... (Este componente no tiene alertas, no hay cambios)
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState("");
     const searchRef = useRef<HTMLInputElement | null>(null);
@@ -281,9 +284,8 @@ const ServiceMultiSelect: React.FC<{
         </div>
       </div>
     );
-  };
+};
 
-// --- MODIFICADO: StaffModal ahora usa SweetAlert ---
 const StaffModal: React.FC<{
     isOpen: boolean;
     onClose: () => void;
@@ -345,7 +347,7 @@ const StaffModal: React.FC<{
       const currentPaymentType = isEditing && currentRoleId === 3 ? (edit.payment_type as PaymentType) || "salary" : "salary";
       setPaymentType(currentPaymentType);
       setSalaryMasked(isEditing && edit.base_salary != null ? formatCOP(String(edit.base_salary)) : "");
-      setCommissionMasked(isEditing && edit.commission_rate != null ? `${(edit.commission_rate * 100).toString()}%` : "");
+      setCommissionMasked(isEditing && edit.commission_rate != null ? formatPercent(String(edit.commission_rate * 100)) : "");
       setPassword("");
       setShowPass(false);
       setSelectedServiceIds([]);
@@ -395,6 +397,14 @@ const StaffModal: React.FC<{
           setPaymentType("salary");
       }
     }, [roleId]);
+
+    useEffect(() => {
+        if (paymentType === 'salary') {
+            setCommissionMasked("");
+        } else if (paymentType === 'commission') {
+            setSalaryMasked("");
+        }
+    }, [paymentType]);
   
     const buildWorkingHoursPayload = (): any | null => {
       if (inheritTenant) return null;
@@ -419,8 +429,9 @@ const StaffModal: React.FC<{
             Swal.fire({ icon: 'warning', title: 'Campo requerido', text: 'El nombre es obligatorio.' });
             return;
         }
-        if (!salaryMasked.trim() && paymentType === 'salary') {
-            Swal.fire({ icon: 'warning', title: 'Campo requerido', text: 'El salario base es requerido.' });
+        
+        if (!salaryMasked.trim() && paymentType === 'salary' && roleId === 3) {
+            Swal.fire({ icon: 'warning', title: 'Campo requerido', text: 'El salario base es requerido para estilistas con este tipo de pago.' });
             return;
         }
     
@@ -443,8 +454,8 @@ const StaffModal: React.FC<{
                 email: email.trim() || null,
                 phone: phone.trim() || null,
                 role_id: roleId,
-                payment_type: paymentType,
-                base_salary: parseCOPToNumber(salaryMasked),
+                payment_type: isStylist ? paymentType : "salary",
+                base_salary: (isStylist && paymentType === 'salary') ? parseCOPToNumber(salaryMasked) : 0,
                 commission_rate: (isStylist && paymentType === 'commission') ? parsePercentToDecimal(commissionMasked) : null,
                 working_hours: isStylist ? working_hours : undefined,
             };
@@ -493,7 +504,6 @@ const StaffModal: React.FC<{
         <Modal isOpen={isOpen} toggle={onClose} size="lg" centered>
             <ModalHeader toggle={onClose}>{edit ? `Editar ${roleName}` : `Nuevo Personal`}</ModalHeader>
             <ModalBody>
-                {/* ... (JSX del modal de personal sin cambios, las funciones internas ya usan Swal) ... */}
                 <Row className="g-3">
                     {!edit && (
                         <Col md={12}>
@@ -548,18 +558,18 @@ const StaffModal: React.FC<{
                         </Col>
                     )}
         
-                    {paymentType === "salary" ? (
+                    {(paymentType === "salary" && roleId === 3) && (
                         <Col md={6}>
-                        <Label className="form-label">Salario base</Label>
-                        <Input value={salaryMasked} placeholder="$500.000" onChange={(e) => setSalaryMasked(formatCOP(e.target.value))} />
+                            <Label className="form-label">Salario base</Label>
+                            <Input value={salaryMasked} placeholder="$500.000" onChange={(e) => setSalaryMasked(formatCOP(e.target.value))} />
                         </Col>
-                    ) : (
-                        roleId === 3 && (
-                            <Col md={6}>
-                                <Label className="form-label">Comisión</Label>
-                                <Input value={commissionMasked} placeholder="55%" onChange={(e) => setCommissionMasked(formatPercent(e.target.value))} />
-                            </Col>
-                        )
+                    )}
+
+                    {(paymentType === "commission" && roleId === 3) && (
+                        <Col md={6}>
+                            <Label className="form-label">Comisión</Label>
+                            <Input value={commissionMasked} placeholder="55%" onChange={(e) => setCommissionMasked(formatPercent(e.target.value))} />
+                        </Col>
                     )}
                     
                     {roleId === 3 && (
@@ -576,7 +586,7 @@ const StaffModal: React.FC<{
                                 </NavLink>
                             </NavItem>
                             </Nav>
-            
+                
                             <TabContent activeTab={tab}>
                             <TabPane tabId="services">
                                 <ServiceMultiSelect services={services} categories={categories} selectedIds={selectedServiceIds} onToggle={toggleService} catFilter={catFilter} onCatFilter={setCatFilter} />
@@ -641,14 +651,10 @@ const StaffModal: React.FC<{
     );
   };
 
-// --- MODIFICADO: Vista Principal ahora usa SweetAlert ---
-const Personal: React.FC = () => {
+// --- AJUSTE: El componente principal ahora recibe props ---
+const Personal: React.FC<PersonalProps> = ({ services, categories, onStaffChange }) => {
     const tenantId = useMemo(() => decodeTenantId() || "", []);
     const [error, setError] = useState<string | null>(null);
-    const [catLoading, setCatLoading] = useState(false);
-    const [svcLoading, setSvcLoading] = useState(false);
-    const [categories, setCategories] = useState<Category[]>([]);
-    const [services, setServices] = useState<Service[]>([]);
     const [staffLoading, setStaffLoading] = useState(false);
     const [staff, setStaff] = useState<Staff[]>([]);
     const [assignedByStaff, setAssignedByStaff] = useState<Record<string, AssignedSvc[]>>({});
@@ -664,30 +670,6 @@ const Personal: React.FC = () => {
       if (page > totalPages) setPage(totalPages);
       if (staff.length === 0) setPage(1);
     }, [staff.length, totalPages, page]);
-  
-    const loadCategories = async () => {
-      setCatLoading(true);
-      try {
-        const { data } = await api.get('/categories');
-        setCategories(data || []);
-      } catch (e:any) {
-        setError(e?.response?.data?.message || e?.message || 'No se pudieron cargar las categorías');
-      } finally {
-        setCatLoading(false);
-      }
-    };
-  
-    const loadServices = async () => {
-      setSvcLoading(true);
-      try {
-        const { data } = await api.get(`/services/tenant/${tenantId}`);
-        setServices(Array.isArray(data) ? data : []);
-      } catch (e:any) {
-        setError(e?.response?.data?.message || e?.message || 'No se pudieron cargar los servicios');
-      } finally {
-        setSvcLoading(false);
-      }
-    };
   
     const loadAssignedForStaff = async (list: Staff[]) => {
       const stylists = list.filter(u => u.role_id === 3); 
@@ -726,12 +708,14 @@ const Personal: React.FC = () => {
   
     useEffect(() => {
       if (!tenantId) return;
-      loadCategories();
-      loadServices();
       loadStaff();
     }, [tenantId]);
   
-    const refreshStaff = async () => { await loadStaff(); };
+    // --- AJUSTE: `refreshStaff` ahora notifica al componente padre ---
+    const refreshStaff = async () => { 
+        await loadStaff(); 
+        onStaffChange(); // <-- AVISA AL PADRE QUE HUBO UN CAMBIO
+    };
   
     const openNewStaff = () => { setStEdit(null); setStModalOpen(true); };
     const openEditStaff = (u: Staff) => { setStEdit(u); setStModalOpen(true); };
@@ -751,7 +735,8 @@ const Personal: React.FC = () => {
         if (result.isConfirmed) {
             try {
                 await api.delete(`/users/${u.id}`);
-                await loadStaff();
+                // --- AJUSTE: `refreshStaff` se llama aquí también para notificar al padre ---
+                await refreshStaff();
                 Swal.fire(
                     '¡Eliminado!',
                     `${u.first_name} ha sido eliminado del personal.`,
@@ -784,16 +769,16 @@ const Personal: React.FC = () => {
           );
         }
         return items;
-      };
+    };
   
     return (
       <div>
-        {/* ... (JSX de la vista de Personal sin cambios, las funciones internas ya usan Swal) ... */}
+        {/* ... (El resto del JSX no necesita cambios) ... */}
         {error && <Alert color="danger" fade={false}>{error}</Alert>}
         <div className="d-flex justify-content-between align-items-center mb-3">
             <h5 className="mb-0">Personal</h5>
             <div className="d-flex align-items-center gap-2">
-            {(staffLoading || catLoading || svcLoading) && <Spinner size="sm" />}
+            {staffLoading && <Spinner size="sm" />}
             <Button color="primary" onClick={openNewStaff}>
                 <i className="ri-add-line me-1" /> Nuevo Personal
             </Button>
@@ -805,6 +790,7 @@ const Personal: React.FC = () => {
                 <tr>
                 <th>Nombre</th>
                 <th>Rol</th>
+                <th>Pago</th>
                 <th>Email</th>
                 <th>Teléfono</th>
                 <th>Servicios que realiza</th>
@@ -813,7 +799,7 @@ const Personal: React.FC = () => {
             </thead>
             <tbody>
                 {paginatedStaff.length === 0 && (
-                <tr><td colSpan={6} className="text-center text-muted">Sin personal</td></tr>
+                <tr><td colSpan={7} className="text-center text-muted">Sin personal</td></tr>
                 )}
                 {paginatedStaff.map(u => {
                 const svcs = assignedByStaff[u.id] || [];
@@ -824,6 +810,21 @@ const Personal: React.FC = () => {
                     <td className="fw-semibold">{u.first_name} {u.last_name || ""}</td>
                     <td>
                         {u.role_id === 2 ? <Badge color="info">Cajero</Badge> : <Badge color="success">Estilista</Badge>}
+                    </td>
+                    <td>
+                        {u.role_id === 3 ? (
+                            u.payment_type === 'commission' && u.commission_rate ? (
+                                <Badge color="info" pill>
+                                    {(u.commission_rate * 100).toFixed(0)}%
+                                </Badge>
+                            ) : u.payment_type === 'salary' ? (
+                                <Badge color="light" className="text-dark" pill>
+                                    {formatCOP(String(u.base_salary))}
+                                </Badge>
+                            ) : <span className="text-muted">—</span>
+                        ) : (
+                            <span className="text-muted">—</span>
+                        )}
                     </td>
                     <td>{u.email || "—"}</td>
                     <td>{u.phone || "—"}</td>

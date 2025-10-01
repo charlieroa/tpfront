@@ -108,10 +108,10 @@ const Login = (props: any) => {
                 <div className="text-center mt-sm-5 mb-4 text-white-50">
                   <div>
                     <Link to="/" className="d-inline-block auth-logo">
-                      <img src={logoLight} alt="" height="20" />
+                      <img src={logoLight} alt="" height="120" />
                     </Link>
                   </div>
-                  <p className="mt-3 fs-15 fw-medium">Premium Admin & Dashboard Template</p>
+                  <p className="mt-3 fs-15 fw-medium">Ahora la IA en tu pelukeria</p>
                 </div>
               </Col>
             </Row>
@@ -121,8 +121,8 @@ const Login = (props: any) => {
                 <Card className="mt-4">
                   <CardBody className="p-4">
                     <div className="text-center mt-2">
-                      <h5 className="text-primary">Welcome Back !</h5>
-                      <p className="text-muted">Sign in to continue to Velzon.</p>
+                      <h5 className="text-primary">Bienvenido </h5>
+                      <p className="text-muted">Ingresa a tu cuenta.</p>
                     </div>
 
                     {/* Mostrar error del slice sin Fade para evitar el warning */}
@@ -239,7 +239,7 @@ const Login = (props: any) => {
                 <div className="mt-4 text-center">
                   <p className="mb-0">
                     Don't have an account ?{" "}
-                    <Link to="/register" className="fw-semibold text-primary text-decoration-underline">
+                    <Link to="/register-tenant" className="fw-semibold text-primary text-decoration-underline">
                       Signup
                     </Link>
                   </p>

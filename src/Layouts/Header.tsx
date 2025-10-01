@@ -21,14 +21,13 @@ import { changeSidebarVisibility } from '../slices/thunks';
 import { useSelector, useDispatch } from "react-redux";
 import { createSelector } from 'reselect';
 
-const Header = ({ onChangeLayoutMode, layoutModeType, headerClass } : any) => {
-    const dispatch : any = useDispatch();
+const Header = ({ onChangeLayoutMode, layoutModeType, headerClass }: any) => {
+    const dispatch: any = useDispatch();
 
     const selectDashboardData = createSelector(
-        (state : any) => state.Layout,
-        (sidebarVisibilitytype) => sidebarVisibilitytype
-      );
-    // Inside your component
+        (state: any) => state.Layout,
+        (layout) => layout.sidebarVisibilitytype // Corregido para seleccionar la propiedad correcta
+    );
     const sidebarVisibilitytype = useSelector(selectDashboardData);
 
     const [search, setSearch] = useState<boolean>(false);
@@ -63,7 +62,6 @@ const Header = ({ onChangeLayoutMode, layoutModeType, headerClass } : any) => {
             }
         }
 
-
         //Two column menu
         if (document.documentElement.getAttribute('data-layout') === "twocolumn") {
             document.body.classList.contains('twocolumn-panel') ? document.body.classList.remove('twocolumn-panel') : document.body.classList.add('twocolumn-panel');
@@ -83,7 +81,7 @@ const Header = ({ onChangeLayoutMode, layoutModeType, headerClass } : any) => {
                                         <img src={logoSm} alt="" height="22" />
                                     </span>
                                     <span className="logo-lg">
-                                        <img src={logoDark} alt="" height="17" />
+                                        <img src={logoDark} alt="" height="150" />
                                     </span>
                                 </Link>
 
@@ -92,7 +90,7 @@ const Header = ({ onChangeLayoutMode, layoutModeType, headerClass } : any) => {
                                         <img src={logoSm} alt="" height="22" />
                                     </span>
                                     <span className="logo-lg">
-                                        <img src={logoLight} alt="" height="17" />
+                                        <img src={logoLight} alt="" height="150" />
                                     </span>
                                 </Link>
                             </div>
@@ -108,7 +106,6 @@ const Header = ({ onChangeLayoutMode, layoutModeType, headerClass } : any) => {
                                     <span></span>
                                 </span>
                             </button>
-
 
                             <SearchOption />
                         </div>
@@ -133,15 +130,12 @@ const Header = ({ onChangeLayoutMode, layoutModeType, headerClass } : any) => {
                                 </DropdownMenu>
                             </Dropdown>
 
-                            {/* LanguageDropdown */}
-                            <LanguageDropdown />
-
-                            {/* WebAppsDropdown */}
-                            <WebAppsDropdown />
-
-                            {/* MyCartDropdwon */}
-                            <MyCartDropdown />
-
+                            {/* --- COMPONENTES COMENTADOS --- */}
+                            {/* <LanguageDropdown /> */}
+                            {/* <WebAppsDropdown /> */}
+                            {/* <MyCartDropdown /> */}
+                            {/* --- FIN DE COMPONENTES COMENTADOS --- */}
+                            
                             {/* FullScreenDropdown */}
                             <FullScreenDropdown />
 
@@ -151,10 +145,10 @@ const Header = ({ onChangeLayoutMode, layoutModeType, headerClass } : any) => {
                                 onChangeLayoutMode={onChangeLayoutMode}
                             />
 
-                            {/* NotificationDropdown */}
-                            <NotificationDropdown />
-
-                            {/* ProfileDropdown */}
+                            {/* --- COMPONENTE COMENTADO --- */}
+                            {/* <NotificationDropdown /> */}
+                            
+                            {/* ProfileDropdown (Recomendado mantener para el logout) */}
                             <ProfileDropdown />
                         </div>
                     </div>

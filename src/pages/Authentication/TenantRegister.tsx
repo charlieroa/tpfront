@@ -1,7 +1,6 @@
-
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Button, Card, CardBody, Col, Container, Form, FormFeedback, Input, Row, Alert } from 'reactstrap';
+import { Button, Card, CardBody, Col, Container, Form, FormFeedback, Input, Row, Alert, Spinner } from 'reactstrap';
 import * as Yup from 'yup';
 import { useFormik } from 'formik';
 import { useDispatch, useSelector } from "react-redux";
@@ -19,7 +18,9 @@ const TenantRegister = () => {
     const navigate = useNavigate();
     const dispatch = useDispatch<any>();
 
-    // Apuntamos al nuevo estado de Redux que creamos
+    const [showPassword, setShowPassword] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+
     const selectRegisterState = (state: any) => state.tenantRegister;
     const registerData = createSelector(
         selectRegisterState,
@@ -29,6 +30,9 @@ const TenantRegister = () => {
         })
     );
     const { success, error } = useSelector(registerData);
+
+    // Console.log final para depuración
+   
 
     const validation = useFormik({
         initialValues: {
@@ -43,20 +47,35 @@ const TenantRegister = () => {
             adminEmail: Yup.string().required("Por favor, ingrese un email").email("Email inválido"),
             adminPassword: Yup.string().required("Por favor, ingrese una contraseña").min(6, "La contraseña debe tener al menos 6 caracteres"),
         }),
-        onSubmit: (values, { setSubmitting }) => {
+        onSubmit: (values) => {
+            setIsLoading(true);
             dispatch(registerTenant(values));
-            setSubmitting(false);
         },
     });
 
+    // --- useEffect CORREGIDO ---
     useEffect(() => {
+        // Manejo del caso de ÉXITO
         if (success) {
-            setTimeout(() => navigate('/login'), 3000);
+            const timer = setTimeout(() => {
+                navigate('/login');
+            }, 3000);
+
+            // La limpieza del estado ahora SOLO se asocia con el éxito
+            return () => {
+                clearTimeout(timer);
+                dispatch(resetTenantRegisterFlag());
+            };
         }
-        return () => {
-            dispatch(resetTenantRegisterFlag());
-        };
-    }, [success, dispatch, navigate]);
+
+        // Manejo del caso de ERROR
+        if (error) {
+            setIsLoading(false);
+            // Opcional: Limpiar el mensaje de error después de 5 segundos
+            const errorTimer = setTimeout(() => dispatch(resetTenantRegisterFlag()), 5000);
+            return () => clearTimeout(errorTimer);
+        }
+    }, [success, error, dispatch, navigate]);
 
     return (
         <React.Fragment>
@@ -71,8 +90,9 @@ const TenantRegister = () => {
                                             <h5 className="text-primary">Crear Cuenta de Peluquería</h5>
                                             <p className="text-muted">Empieza a gestionar tu negocio hoy mismo.</p>
                                         </div>
-                                        {success && (<Alert color="success">¡Registro exitoso! Serás redirigido para que inicies sesión.</Alert>)}
-                                        {error && (<Alert color="danger">{error.message || "Ha ocurrido un error en el registro."}</Alert>)}
+                                        {success && (<Alert color="success" fade={false}>¡Registro exitoso! Serás redirigido para que inicies sesión.</Alert>)}
+                                        {error && (<Alert color="danger" fade={false}>{error}</Alert>)}
+
                                         <div className="p-2 mt-4">
                                             <Form onSubmit={(e) => { e.preventDefault(); validation.handleSubmit(); }}>
                                                 
@@ -96,12 +116,35 @@ const TenantRegister = () => {
                                                 
                                                 <div className="mb-3">
                                                     <label className="form-label" htmlFor="adminPassword">Contraseña <span className="text-danger">*</span></label>
-                                                    <Input name="adminPassword" type="password" placeholder="Crea una contraseña segura" onChange={validation.handleChange} onBlur={validation.handleBlur} value={validation.values.adminPassword} invalid={!!(validation.touched.adminPassword && validation.errors.adminPassword)} />
-                                                    {validation.touched.adminPassword && validation.errors.adminPassword ? <FormFeedback type="invalid">{validation.errors.adminPassword as string}</FormFeedback> : null}
+                                                    <div className="position-relative auth-pass-inputgroup">
+                                                        <Input
+                                                            name="adminPassword"
+                                                            type={showPassword ? "text" : "password"}
+                                                            placeholder="Crea una contraseña segura"
+                                                            onChange={validation.handleChange}
+                                                            onBlur={validation.handleBlur}
+                                                            value={validation.values.adminPassword}
+                                                            invalid={!!(validation.touched.adminPassword && validation.errors.adminPassword)}
+                                                        />
+                                                        <button
+                                                            className="btn btn-link position-absolute end-0 top-0 text-decoration-none text-muted shadow-none"
+                                                            type="button"
+                                                            onClick={() => setShowPassword(!showPassword)}
+                                                        >
+                                                            <i className={showPassword ? "ri-eye-off-fill" : "ri-eye-fill"}></i>
+                                                        </button>
+                                                        {validation.touched.adminPassword && validation.errors.adminPassword ? <FormFeedback type="invalid">{validation.errors.adminPassword as string}</FormFeedback> : null}
+                                                    </div>
                                                 </div>
 
                                                 <div className="mt-4">
-                                                    <Button color="success" className="w-100" type="submit" disabled={validation.isSubmitting}>Crear mi cuenta</Button>
+                                                    <Button color="success" className="w-100" type="submit" disabled={isLoading}>
+                                                        {isLoading ? (
+                                                            <Spinner size="sm" className="me-2"> Creando... </Spinner>
+                                                        ) : (
+                                                            "Crear mi cuenta"
+                                                        )}
+                                                    </Button>
                                                 </div>
                                             </Form>
                                         </div>

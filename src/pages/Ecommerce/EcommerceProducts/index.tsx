@@ -27,7 +27,10 @@ import BreadCrumb from "../../../Components/Common/BreadCrumb";
 import TableContainer from "../../../Components/Common/TableContainer";
 import CategoryManagerModal from "../../../Components/Common/CategoryManagerModal";
 
-const BACKEND_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
+// --- LÍNEA CORREGIDA ---
+// Eliminamos el respaldo a 'localhost'. Ahora la URL DEBE venir del archivo .env.
+const BACKEND_URL = process.env.REACT_APP_API_URL;
+
 type TabKey = "all" | "cliente" | "estilista";
 
 // Helper para obtener el tenantId del token
@@ -277,7 +280,7 @@ const ProductsPage = () => {
                     <ModalHeader toggle={() => { setModalOpen(false); resetFormAndImage(); }}>{isEditMode ? 'Editar Producto' : 'Agregar Nuevo Producto'}</ModalHeader>
                     <Form onSubmit={handleFormSubmit}>
                         <ModalBody>
-                             <Row>
+                            <Row>
                                 <Col md={6} className="mb-3"><Label>Nombre</Label><Input value={formData.name || ''} onChange={(e: ChangeEvent<HTMLInputElement>) => setFormData(p => ({ ...p, name: e.target.value }))} required/></Col>
                                 <Col md={6} className="mb-3">
                                     <Label>Categoría</Label>
