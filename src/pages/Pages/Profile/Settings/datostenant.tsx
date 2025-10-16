@@ -57,19 +57,124 @@ const DatosTenant: React.FC<DatosTenantProps> = ({
     setter(e.target.value);
   };
 
+  // Handler especial para la URL que normaliza automáticamente
+  const handleWebsiteChange = (e: ChangeEvent<HTMLInputElement>) => {
+    let value = e.target.value.trim();
+    
+    // Si el usuario está borrando, permitir campo vacío
+    if (value === "") {
+      setWebsite("");
+      return;
+    }
+    
+    // Si no tiene protocolo, agregarlo automáticamente
+    if (value && !value.startsWith("http://") && !value.startsWith("https://")) {
+      // Remover www. si lo tiene al inicio para evitar duplicados
+      if (value.startsWith("www.")) {
+        value = value.substring(4);
+      }
+      value = "https://www." + value;
+    }
+    
+    setWebsite(value);
+  };
+
+  // Mostrar la URL de forma amigable en el placeholder
+  const getWebsiteDisplayValue = () => {
+    if (!website) return "";
+    
+    // Mostrar la URL completa como está almacenada
+    return website;
+  };
+
   /* ------- UI: Datos del Negocio (Reorganizado) ------- */
   const DatosForm = (
     <Form onSubmit={(e) => { e.preventDefault(); onSubmit?.(e); }}>
       <h5 className="mb-3">Datos del Negocio</h5>
       <Row className="g-3">
-        <Col lg={6}><div className="mb-3"><Label htmlFor="tenant-name" className="form-label">Nombre</Label><Input id="tenant-name" value={name} onChange={handleInputChange(setName)} placeholder="Ej: Bunker Barber Shop" required /></div></Col>
-        <Col lg={6}><div className="mb-3"><Label htmlFor="tenant-phone" className="form-label">Teléfono</Label><Input id="tenant-phone" value={phone} onChange={handleInputChange(setPhone)} placeholder="Ej: 3001234567" required /></div></Col>
+        <Col lg={6}>
+          <div className="mb-3">
+            <Label htmlFor="tenant-name" className="form-label">Nombre</Label>
+            <Input 
+              id="tenant-name" 
+              value={name} 
+              onChange={handleInputChange(setName)} 
+              placeholder="Ej: Bunker Barber Shop" 
+              required 
+            />
+          </div>
+        </Col>
         
-        <Col lg={6}><div className="mb-3"><Label htmlFor="tenant-address" className="form-label">Dirección</Label><Input id="tenant-address" value={address} onChange={handleInputChange(setAddress)} placeholder="Ej: Calle 123 #45-67" required /></div></Col>
-        <Col lg={6}><div className="mb-3"><Label htmlFor="tenant-email" className="form-label">Email</Label><Input id="tenant-email" type="email" value={email} onChange={handleInputChange(setEmail)} placeholder="contacto@mi-peluqueria.com" /></div></Col>
+        <Col lg={6}>
+          <div className="mb-3">
+            <Label htmlFor="tenant-phone" className="form-label">Teléfono</Label>
+            <Input 
+              id="tenant-phone" 
+              value={phone} 
+              onChange={handleInputChange(setPhone)} 
+              placeholder="Ej: 3001234567" 
+              required 
+            />
+          </div>
+        </Col>
+        
+        <Col lg={6}>
+          <div className="mb-3">
+            <Label htmlFor="tenant-address" className="form-label">Dirección</Label>
+            <Input 
+              id="tenant-address" 
+              value={address} 
+              onChange={handleInputChange(setAddress)} 
+              placeholder="Ej: Calle 123 #45-67" 
+              required 
+            />
+          </div>
+        </Col>
+        
+        <Col lg={6}>
+          <div className="mb-3">
+            <Label htmlFor="tenant-email" className="form-label">Email</Label>
+            <Input 
+              id="tenant-email" 
+              type="email" 
+              value={email} 
+              onChange={handleInputChange(setEmail)} 
+              placeholder="contacto@mi-peluqueria.com" 
+            />
+          </div>
+        </Col>
 
-        <Col lg={6}><div className="mb-3"><Label htmlFor="tenant-website" className="form-label">Página web</Label><Input id="tenant-website" type="url" value={website} onChange={handleInputChange(setWebsite)} placeholder="https://mi-peluqueria.com" /></div></Col>
-        <Col lg={6}><div className="mb-3"><Label htmlFor="tenant-iva" className="form-label">IVA (%)</Label><Input id="tenant-iva" type="number" min={0} max={100} step="0.01" value={ivaRate} onChange={handleInputChange(setIvaRate)} placeholder="19" /></div></Col>
+        <Col lg={6}>
+          <div className="mb-3">
+            <Label htmlFor="tenant-website" className="form-label">Página web</Label>
+            <Input 
+              id="tenant-website" 
+              type="text"
+              value={getWebsiteDisplayValue()} 
+              onChange={handleWebsiteChange} 
+              placeholder="www.mipagina.com o mipagina.com" 
+            />
+            <small className="text-muted">
+              Puedes escribir: www.mipagina.com o simplemente mipagina.com
+            </small>
+          </div>
+        </Col>
+        
+        <Col lg={6}>
+          <div className="mb-3">
+            <Label htmlFor="tenant-iva" className="form-label">IVA (%)</Label>
+            <Input 
+              id="tenant-iva" 
+              type="number" 
+              min={0} 
+              max={100} 
+              step="0.01" 
+              value={ivaRate} 
+              onChange={handleInputChange(setIvaRate)} 
+              placeholder="19" 
+            />
+          </div>
+        </Col>
       </Row>
 
       {/* --- SECCIÓN MÓDULOS Y CONFIGURACIONES (Layout Ajustado) --- */}
@@ -78,37 +183,87 @@ const DatosTenant: React.FC<DatosTenantProps> = ({
       <Row>
         <Col lg={12}>
           <div className="d-flex align-items-center flex-wrap gap-4 mb-4">
-              <div className="form-check form-switch form-switch-lg">
-                <Input className="form-check-input" type="checkbox" role="switch" id="admin-fee-switch" checked={adminFeeEnabled} onChange={(e) => setAdminFeeEnabled(e.target.checked)} />
-                <Label className="form-check-label" htmlFor="admin-fee-switch">En tu peluquería, ¿cobras % administrativo?</Label>
-              </div>
+            <div className="form-check form-switch form-switch-lg">
+              <Input 
+                className="form-check-input" 
+                type="checkbox" 
+                role="switch" 
+                id="admin-fee-switch" 
+                checked={adminFeeEnabled} 
+                onChange={(e) => setAdminFeeEnabled(e.target.checked)} 
+              />
+              <Label className="form-check-label" htmlFor="admin-fee-switch">
+                En tu peluquería, ¿cobras % administrativo?
+              </Label>
+            </div>
 
-              {adminFeeEnabled && (
-                <div style={{maxWidth: "200px"}}>
-                  <InputGroup>
-                      <Input id="tenant-admin-fee" type="number" min={0} max={100} step="0.01" value={adminFee} onChange={handleInputChange(setAdminFee)} placeholder="10" />
-                      <span className="input-group-text">%</span>
-                  </InputGroup>
-                </div>
-              )}
+            {adminFeeEnabled && (
+              <div style={{maxWidth: "200px"}}>
+                <InputGroup>
+                  <Input 
+                    id="tenant-admin-fee" 
+                    type="number" 
+                    min={0} 
+                    max={100} 
+                    step="0.01" 
+                    value={adminFee} 
+                    onChange={handleInputChange(setAdminFee)} 
+                    placeholder="10" 
+                  />
+                  <span className="input-group-text">%</span>
+                </InputGroup>
+              </div>
+            )}
           </div>
 
           <div className="form-check form-switch form-switch-lg mb-4">
-            <Input className="form-check-input" type="checkbox" role="switch" id="products-for-staff-switch" checked={productsForStaff} onChange={(e) => setProductsForStaff(e.target.checked)} />
-            <Label className="form-check-label" htmlFor="products-for-staff-switch">¿Venden productos para uso del personal?</Label>
-            <p className="text-muted mt-1 small">Activa la opción de "audiencia" en el inventario para productos de uso interno.</p>
+            <Input 
+              className="form-check-input" 
+              type="checkbox" 
+              role="switch" 
+              id="products-for-staff-switch" 
+              checked={productsForStaff} 
+              onChange={(e) => setProductsForStaff(e.target.checked)} 
+            />
+            <Label className="form-check-label" htmlFor="products-for-staff-switch">
+              ¿Venden productos para uso del personal?
+            </Label>
+            <p className="text-muted mt-1 small">
+              Activa la opción de "audiencia" en el inventario para productos de uso interno.
+            </p>
           </div>
 
           <div className="form-check form-switch form-switch-lg mb-3">
-            <Input className="form-check-input" type="checkbox" role="switch" id="loans-to-staff-switch" checked={loansToStaff} onChange={(e) => setLoansToStaff(e.target.checked)} />
-            <Label className="form-check-label" htmlFor="loans-to-staff-switch">En tu peluquería, ¿prestas dinero a tu personal?</Label>
-            <p className="text-muted mt-1 small">Activará el módulo de préstamos y adelantos en la sección de nómina.</p>
+            <Input 
+              className="form-check-input" 
+              type="checkbox" 
+              role="switch" 
+              id="loans-to-staff-switch" 
+              checked={loansToStaff} 
+              onChange={(e) => setLoansToStaff(e.target.checked)} 
+            />
+            <Label className="form-check-label" htmlFor="loans-to-staff-switch">
+              En tu peluquería, ¿prestas dinero a tu personal?
+            </Label>
+            <p className="text-muted mt-1 small">
+              Activará el módulo de préstamos y adelantos en la sección de nómina.
+            </p>
           </div>
         </Col>
       </Row>
       
       <Row>
-        <Col lg={12} className="pt-2"><div className="hstack gap-2 justify-content-end"><Button type="button" color="soft-success" onClick={() => onCancel?.()}>Cancelar</Button><Button type="submit" color="primary" disabled={saving}>{saving && <Spinner size="sm" className="me-2" />} Guardar cambios</Button></div></Col>
+        <Col lg={12} className="pt-2">
+          <div className="hstack gap-2 justify-content-end">
+            <Button type="button" color="soft-success" onClick={() => onCancel?.()}>
+              Cancelar
+            </Button>
+            <Button type="submit" color="primary" disabled={saving}>
+              {saving && <Spinner size="sm" className="me-2" />}
+              Guardar cambios
+            </Button>
+          </div>
+        </Col>
       </Row>
     </Form>
   );
@@ -124,18 +279,67 @@ const DatosTenant: React.FC<DatosTenantProps> = ({
             <Col lg={12} key={key}>
               <div className="border rounded p-3 mb-3">
                 <div className="d-flex align-items-center justify-content-between flex-wrap gap-3">
-                  <div className="form-check form-switch"><Input className="form-check-input" type="checkbox" id={`active-${key}`} checked={day.active} onChange={() => toggleDay(key)} /><Label className="form-check-label fw-semibold ms-2" htmlFor={`active-${key}`}>{label} {day.active ? "(Abierto)" : "(Cerrado)"}</Label></div>
+                  <div className="form-check form-switch">
+                    <Input 
+                      className="form-check-input" 
+                      type="checkbox" 
+                      id={`active-${key}`} 
+                      checked={day.active} 
+                      onChange={() => toggleDay(key)} 
+                    />
+                    <Label className="form-check-label fw-semibold ms-2" htmlFor={`active-${key}`}>
+                      {label} {day.active ? "(Abierto)" : "(Cerrado)"}
+                    </Label>
+                  </div>
                   <div className="d-flex align-items-center gap-3">
-                    <div className="d-flex align-items-center gap-2"><Label className="mb-0" htmlFor={`start-${key}`}>Inicio</Label><Input id={`start-${key}`} type="time" value={day.start} disabled={!day.active} onChange={(e) => changeHour(key, "start", e.target.value)} /></div>
-                    <div className="d-flex align-items-center gap-2"><Label className="mb-0" htmlFor={`end-${key}`}>Fin</Label><Input id={`end-${key}`} type="time" value={day.end} disabled={!day.active} onChange={(e) => changeHour(key, "end", e.target.value)} /></div>
-                    {isMonday && (<Button type="button" size="sm" color="secondary" className="ms-2" onClick={applyMondayToAll}>Aplicar a todos</Button>)}
+                    <div className="d-flex align-items-center gap-2">
+                      <Label className="mb-0" htmlFor={`start-${key}`}>Inicio</Label>
+                      <Input 
+                        id={`start-${key}`} 
+                        type="time" 
+                        value={day.start} 
+                        disabled={!day.active} 
+                        onChange={(e) => changeHour(key, "start", e.target.value)} 
+                      />
+                    </div>
+                    <div className="d-flex align-items-center gap-2">
+                      <Label className="mb-0" htmlFor={`end-${key}`}>Fin</Label>
+                      <Input 
+                        id={`end-${key}`} 
+                        type="time" 
+                        value={day.end} 
+                        disabled={!day.active} 
+                        onChange={(e) => changeHour(key, "end", e.target.value)} 
+                      />
+                    </div>
+                    {isMonday && (
+                      <Button 
+                        type="button" 
+                        size="sm" 
+                        color="secondary" 
+                        className="ms-2" 
+                        onClick={applyMondayToAll}
+                      >
+                        Aplicar a todos
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>
             </Col>
           );
         })}
-        <Col lg={12}><div className="hstack gap-2 justify-content-end"><Button type="button" color="soft-success" onClick={() => onCancel?.()}>Cancelar</Button><Button type="submit" color="primary" disabled={saving}>{saving && <Spinner size="sm" className="me-2" />} Guardar horarios</Button></div></Col>
+        <Col lg={12}>
+          <div className="hstack gap-2 justify-content-end">
+            <Button type="button" color="soft-success" onClick={() => onCancel?.()}>
+              Cancelar
+            </Button>
+            <Button type="submit" color="primary" disabled={saving}>
+              {saving && <Spinner size="sm" className="me-2" />}
+              Guardar horarios
+            </Button>
+          </div>
+        </Col>
       </Row>
     </Form>
   );
