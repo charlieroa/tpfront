@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Card, CardBody, Col, Container, Input, Label, Row,
-  Button, Form, FormFeedback, Alert, Spinner
+  Button, Form, FormFeedback, Spinner
 } from 'reactstrap';
 import ParticlesAuth from "../AuthenticationInner/ParticlesAuth";
 
@@ -22,6 +22,9 @@ import { loginUser, socialLogin, resetLoginFlag } from "../../slices/thunks";
 import logoLight from "../../assets/images/logo-light.png";
 import { createSelector } from 'reselect';
 
+// SweetAlert2
+import Swal from 'sweetalert2';
+
 const Login = (props: any) => {
   const dispatch: any = useDispatch();
 
@@ -29,9 +32,9 @@ const Login = (props: any) => {
   const loginpageData = createSelector(
     selectLayoutState,
     (state) => ({
-      user: state.Account.user,
-      error: state.Login.error,
-      errorMsg: state.Login.errorMsg,
+      user: state.Account?.user,
+      error: state.Login?.error,
+      errorMsg: state.Login?.errorMsg,
     })
   );
 
@@ -61,9 +64,8 @@ const Login = (props: any) => {
   const validation: any = useFormik({
     enableReinitialize: true,
     initialValues: {
-      // Puedes dejar tus defaults si te sirven para probar
-      email: userLogin.email || "admin@admin.com",
-      password: userLogin.password || "12345678",
+      email: userLogin.email,
+      password: userLogin.password,
     },
     validationSchema: Yup.object({
       email: Yup.string().required("Please Enter Your Email"),
@@ -71,7 +73,6 @@ const Login = (props: any) => {
     }),
     onSubmit: (values) => {
       setLoader(true);
-      // Mantienes tu flujo con Redux Thunk + navigate
       dispatch(loginUser(values, props.router.navigate));
     },
   });
@@ -80,21 +81,32 @@ const Login = (props: any) => {
     dispatch(socialLogin(type, props.router.navigate));
   };
 
-  // Limpia error del slice y apaga loader cuando llega errorMsg
+  // Mostrar SweetAlert en errores (contraseña incorrecta / servidor)
   useEffect(() => {
-    if (errorMsg) {
-      const t = setTimeout(() => {
-        dispatch(resetLoginFlag());
-        setLoader(false);
-      }, 3000);
-      return () => clearTimeout(t);
-    }
-  }, [dispatch, errorMsg]);
+    if (errorMsg || error) {
+      const messageRaw = (errorMsg || error || "").toString();
+      // Heurística sencilla para mensaje más claro
+      const isCredError =
+        /unauthorized|invalid|credencial|credential|password|contraseña|401/i.test(messageRaw);
 
-  // Si usas error además de errorMsg, también apaga loader
-  useEffect(() => {
-    if (error) setLoader(false);
-  }, [error]);
+      const title = isCredError ? "Credenciales inválidas" : "Credenciales inválidas";
+      const text =
+        messageRaw?.trim() ||
+        (isCredError
+          ? "Verifica tu email y contraseña."
+          : "Ocurrió un problema al iniciar sesión. Inténtalo nuevamente.");
+
+      Swal.fire({
+        icon: "error",
+        title,
+        text,
+        confirmButtonText: "Entendido",
+      }).finally(() => {
+        setLoader(false);
+        dispatch(resetLoginFlag());
+      });
+    }
+  }, [dispatch, errorMsg, error]);
 
   document.title = "Basic SignIn | Velzon - React Admin & Dashboard Template";
 
@@ -125,9 +137,7 @@ const Login = (props: any) => {
                       <p className="text-muted">Ingresa a tu cuenta.</p>
                     </div>
 
-                    {/* Mostrar error del slice sin Fade para evitar el warning */}
-                    {error && <Alert color="danger" fade={false}>{error}</Alert>}
-                    {errorMsg && <Alert color="danger" fade={false}>{errorMsg}</Alert>}
+                    {/* Quitamos los Alerts en pantalla; ahora usamos SweetAlert2 por useEffect */}
 
                     <div className="p-2 mt-4">
                       <Form
@@ -186,7 +196,7 @@ const Login = (props: any) => {
                         </div>
 
                         <div className="form-check">
-                          <Input className="form-check-input" type="checkbox" value="" id="auth-remember-check" />
+                          <Input className="form-check-input" type="checkbox" id="auth-remember-check" />
                           <Label className="form-check-label" htmlFor="auth-remember-check">Remember me</Label>
                         </div>
 

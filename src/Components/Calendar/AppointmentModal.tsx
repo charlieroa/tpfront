@@ -1,6 +1,7 @@
 // =============================================
 // File: src/pages/Calendar/AppointmentModal.tsx
-// (Versión completa con Modal de Creación de Cliente)
+// (Versión completa con: bloqueo fecha pasada + ocultar horas pasadas estrictamente +
+// modal de creación de cliente con "Guardar y seguir" + sin mostrar ID de cliente recién creado)
 // =============================================
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -30,7 +31,6 @@ import Swal from 'sweetalert2';
 // Thunks activos
 import {
   updateAppointment as onUpdateAppointment,
-  createNewClient as onCreateNewClient,
   createAppointmentsBatch as onCreateAppointmentsBatch,
   fetchTenantSlots,
   fetchAvailableStylists,
@@ -56,7 +56,7 @@ interface AppointmentModalProps {
   defaultDate?: Date | null;
 }
 
-// Helpers
+// Helpers de fecha/hora
 const toYyyyMmDd = (d: string | Date): string => {
   const dt = new Date(d);
   dt.setMinutes(dt.getMinutes() - dt.getTimezoneOffset());
@@ -68,6 +68,19 @@ const toHHmmLocal = (d: string | Date) => {
   const hh = String(dt.getHours()).padStart(2, "0");
   const mm = String(dt.getMinutes()).padStart(2, "0");
   return `${hh}:${mm}`;
+};
+
+const isSameDayLocal = (a: Date, b: Date) => {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+};
+
+const hhmmToMinutes = (hhmm: string) => {
+  const [h, m] = hhmm.split(":").map(Number);
+  return h * 60 + m;
 };
 
 function normalizeSlotsPayload(payload: any): string[] {
@@ -114,20 +127,44 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
   const [availableStylists, setAvailableStylists] = useState<Stylist[]>([]);
   const [isLoadingStylists, setIsLoadingStylists] = useState<boolean>(false);
 
-  const [availableStylistsRows, setAvailableStylistsRows] = useState<
-    Record<number, Stylist[]>
-  >({});
-  const [isLoadingStylistsRows, setIsLoadingStylistsRows] = useState<
-    Record<number, boolean>
-  >({});
+  const [availableStylistsRows, setAvailableStylistsRows] = useState<Record<number, Stylist[]>>({});
+  const [isLoadingStylistsRows, setIsLoadingStylistsRows] = useState<Record<number, boolean>>({});
 
   const [isSuggestingMain, setIsSuggestingMain] = useState<boolean>(false);
-  const [isSuggestingRow, setIsSuggestingRow] = useState<Record<number, boolean>>(
-    {}
-  );
+  const [isSuggestingRow, setIsSuggestingRow] = useState<Record<number, boolean>>({});
 
   const firstLoadEditRef = useRef<boolean>(false);
   const isEditMode = !!selectedEvent;
+
+  // Mapa local para mostrar nombre del cliente recién creado (sin ID)
+  const [createdClientsMap, setCreatedClientsMap] = useState<Record<string, { first_name: string; last_name?: string }>>({});
+  // Control para cerrar o no el modal de cliente al guardar
+  const [closeClientModalOnSave, setCloseClientModalOnSave] = useState<boolean>(true);
+
+  // ============ BLOQUEO DE APERTURA SI DEFAULTDATE < HOY ============
+  useEffect(() => {
+    if (!isOpen) return;
+
+    if (!isEditMode && defaultDate) {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      const target = new Date(defaultDate);
+      const targetStart = new Date(target);
+      targetStart.setHours(0, 0, 0, 0);
+
+      if (targetStart.getTime() < todayStart.getTime()) {
+        Swal.fire({
+          title: "Fecha no válida",
+          text: "No se puede agendar porque el día ya pasó.",
+          icon: "warning",
+          confirmButtonText: "Entendido",
+        });
+        onClose();
+        return;
+      }
+    }
+  }, [isOpen, isEditMode, defaultDate, onClose]);
 
   // --- FORMIK PRINCIPAL (APPOINTMENT) ---
   const validation = useFormik<AppointmentFormValues>({
@@ -213,13 +250,9 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
     },
     validationSchema: Yup.object({
       first_name: Yup.string().required("El nombre es obligatorio"),
-      email: Yup.string()
-        .email("Debe ser un email válido")
-        .required("El email es obligatorio"),
+      email: Yup.string().email("Debe ser un email válido").required("El email es obligatorio"),
       phone: Yup.string().optional(),
-      password: Yup.string()
-        .min(6, "La contraseña debe tener al menos 6 caracteres")
-        .required("La contraseña es obligatoria"),
+      password: Yup.string().min(6, "La contraseña debe tener al menos 6 caracteres").required("La contraseña es obligatoria"),
     }),
     onSubmit: async (values, { setSubmitting, resetForm }) => {
       setSubmitting(true);
@@ -234,29 +267,41 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
 
         const resultAction = await dispatch(addNewContact(clientData));
         const newClient = unwrapResult(resultAction);
-        
+
+        // Guardar label local para evitar mostrar "ID ..."
+        setCreatedClientsMap((prev) => ({
+          ...prev,
+          [String(newClient.id)]: { first_name: values.first_name, last_name: values.last_name },
+        }));
+
+        // Seleccionar automáticamente el nuevo cliente en el formulario principal
+        validation.setFieldValue("client_id", String(newClient.id));
+
         Swal.fire({
           title: "¡Éxito!",
           text: "Cliente creado con éxito.",
           icon: "success",
-          timer: 2000,
+          timer: 1600,
           showConfirmButton: false,
         });
 
-        // Seleccionar automáticamente el nuevo cliente
-        validation.setFieldValue("client_id", newClient.id);
-        
+        // Limpiar form del cliente
         resetForm();
-        setShowClientModal(false);
-        setShowPassword(false);
+
+        // Cerrar o mantener abierto según botón pulsado
+        if (closeClientModalOnSave) {
+          setShowClientModal(false);
+          setShowPassword(false);
+        }
       } catch (err: any) {
         Swal.fire({
           title: "Error",
-          text: err.error || "Ocurrió un error al crear el cliente",
+          text: err?.error || "Ocurrió un error al crear el cliente",
           icon: "error",
         });
       } finally {
         setSubmitting(false);
+        setCloseClientModalOnSave(true);
       }
     },
   });
@@ -269,6 +314,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
       setTimeSlots([]);
       setAvailableStylists([]);
       setAvailableStylistsRows({});
+      setCreatedClientsMap({});
     };
 
     if (isOpen) {
@@ -285,7 +331,8 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
           start_time: toHHmmLocal(start_time),
         });
       } else if (defaultDate) {
-        validation.setFieldValue("date", defaultDate);
+        const d = new Date(defaultDate);
+        validation.setFieldValue("date", d);
       }
     } else {
       resetState();
@@ -304,12 +351,29 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
     if (service_id && date) {
       setIsLoadingTimeSlots(true);
       const dateStr = toYyyyMmDd(date);
+
       dispatch(fetchTenantSlots(dateStr, service_id))
         .then((payload: any) => {
           const fetched = normalizeSlotsPayload(payload);
+
+          // Filtrar horarios pasados si la fecha es HOY (estricto: > ahora)
+          let filtered = fetched;
+          const selectedDate = new Date(date as any);
+          const now = new Date();
+          if (isSameDayLocal(selectedDate, now)) {
+            const currentMins = now.getHours() * 60 + now.getMinutes();
+            filtered = fetched.filter((t) => hhmmToMinutes(t) > currentMins);
+          }
+
+          // Si la hora seleccionada quedó inválida (pasada), limpiarla
           const current = validation.values.start_time;
-          const merged =
-            current && !fetched.includes(current) ? [current, ...fetched] : fetched;
+          const stillValid = current && filtered.includes(current);
+          const merged = stillValid ? filtered : filtered;
+
+          if (!stillValid && current) {
+            validation.setFieldValue("start_time", "");
+          }
+
           setTimeSlots(merged);
         })
         .catch(() => setTimeSlots([]))
@@ -337,9 +401,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
       dispatch(fetchAvailableStylists(dateStr, start_time, service_id))
         .then((stylists: Stylist[]) => {
           const currentId = validation.values.stylist_id;
-          const hasCurrent = stylists.some(
-            (s) => String(s.id) === String(currentId)
-          );
+          const hasCurrent = stylists.some((s) => String(s.id) === String(currentId));
           const merged = hasCurrent
             ? stylists
             : currentId
@@ -363,19 +425,12 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
       setAvailableStylists([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    validation.values.service_id,
-    validation.values.date,
-    validation.values.start_time,
-    dispatch,
-  ]);
+  }, [validation.values.service_id, validation.values.date, validation.values.start_time, dispatch]);
 
   // --- Cambio de servicio en filas extra ---
   const handleExtraRowServiceChange = (rowIndex: number, newServiceId: string) => {
     setExtraRows((rows) =>
-      rows.map((row, i) =>
-        i === rowIndex ? { service_id: newServiceId, stylist_id: "" } : row
-      )
+      rows.map((row, i) => (i === rowIndex ? { service_id: newServiceId, stylist_id: "" } : row))
     );
     setAvailableStylistsRows((prev) => ({ ...prev, [rowIndex]: [] }));
   };
@@ -399,18 +454,10 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    validation.values.date,
-    validation.values.start_time,
-    extraRows.map((r) => r.service_id).join(),
-    dispatch,
-  ]);
+  }, [validation.values.date, validation.values.start_time, extraRows.map((r) => r.service_id).join(), dispatch]);
 
   // --- Digiturno (principal) ---
-  const isStylistUsedElsewhere = (
-    stylistId: string | number,
-    selfIndex?: number
-  ) => {
+  const isStylistUsedElsewhere = (stylistId: string | number, selfIndex?: number) => {
     const idStr = String(stylistId);
     if (selfIndex === undefined) {
       return extraRows.some((r) => String(r.stylist_id) === idStr);
@@ -428,17 +475,13 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
     setIsSuggestingMain(true);
     try {
       const dateStr = toYyyyMmDd(date);
-      const stylists: Stylist[] = await dispatch(
-        fetchAvailableStylists(dateStr, start_time, service_id)
-      );
+      const stylists: Stylist[] = await dispatch(fetchAvailableStylists(dateStr, start_time, service_id));
       const nextStylist = stylists.find((s) => !isStylistUsedElsewhere(s.id));
       if (nextStylist) {
         validation.setFieldValue("stylist_id", String(nextStylist.id));
         toast.success(`Digiturno asignó a: ${nextStylist.first_name || ""}`);
       } else {
-        toast.error(
-          "No hay estilistas disponibles que no estén ya asignados en otro servicio."
-        );
+        toast.error("No hay estilistas disponibles que no estén ya asignados en otro servicio.");
       }
     } finally {
       setIsSuggestingMain(false);
@@ -450,26 +493,16 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
     const { date, start_time } = validation.values;
     const { service_id } = extraRows[rowIndex] || {};
     if (!service_id || !date || !start_time) {
-      toast.info(
-        "Selecciona servicio, fecha y hora antes de usar Digiturno en esta fila."
-      );
+      toast.info("Selecciona servicio, fecha y hora antes de usar Digiturno en esta fila.");
       return;
     }
     setIsSuggestingRow((p) => ({ ...p, [rowIndex]: true }));
     try {
       const dateStr = toYyyyMmDd(date);
-      const stylists: Stylist[] = await dispatch(
-        fetchAvailableStylists(dateStr, start_time, service_id)
-      );
-      const nextStylist = stylists.find(
-        (s) => !isStylistUsedElsewhere(s.id, rowIndex)
-      );
+      const stylists: Stylist[] = await dispatch(fetchAvailableStylists(dateStr, start_time, service_id));
+      const nextStylist = stylists.find((s) => !isStylistUsedElsewhere(s.id, rowIndex));
       if (nextStylist) {
-        setExtraRows((rows) =>
-          rows.map((r, i) =>
-            i === rowIndex ? { ...r, stylist_id: String(nextStylist.id) } : r
-          )
-        );
+        setExtraRows((rows) => rows.map((r, i) => (i === rowIndex ? { ...r, stylist_id: String(nextStylist.id) } : r)));
         toast.success(`Digiturno asignó a: ${nextStylist.first_name || ""}`);
       } else {
         toast.error("No hay estilistas disponibles para esta fila.");
@@ -480,43 +513,41 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
   };
 
   // --- Helpers UI ---
-  const addExtraRow = () =>
-    setExtraRows((prev) => [...prev, { service_id: "", stylist_id: "" }]);
-
-  const removeExtraRow = (idx: number) =>
-    setExtraRows((prev) => prev.filter((_, i) => i !== idx));
-
-  const changeExtraRow = (
-    idx: number,
-    field: keyof ExtraRow,
-    value: string
-  ) => {
+  const addExtraRow = () => setExtraRows((prev) => [...prev, { service_id: "", stylist_id: "" }]);
+  const removeExtraRow = (idx: number) => setExtraRows((prev) => prev.filter((_, i) => i !== idx));
+  const changeExtraRow = (idx: number, field: keyof ExtraRow, value: string) => {
     if (field === "service_id") {
       handleExtraRowServiceChange(idx, value);
     } else {
-      setExtraRows((prev) =>
-        prev.map((r, i) => (i === idx ? { ...r, [field]: value } : r))
-      );
+      setExtraRows((prev) => prev.map((r, i) => (i === idx ? { ...r, [field]: value } : r)));
     }
   };
 
-  const canSubmit = useMemo(
-    () => validation.isValid && !validation.isSubmitting,
-    [validation.isValid, validation.isSubmitting]
-  );
+  const canSubmit = useMemo(() => validation.isValid && !validation.isSubmitting, [validation.isValid, validation.isSubmitting]);
 
   // === Fallbacks ===
-  const clientMissing =
-    !!validation.values.client_id &&
+  const clientMissing = !!validation.values.client_id &&
     !clients.some((c: any) => String(c.id) === String(validation.values.client_id));
-  const timeMissing =
-    !!validation.values.start_time &&
-    !timeSlots.includes(validation.values.start_time);
-  const stylistMissing =
-    !!validation.values.stylist_id &&
-    !availableStylists.some(
-      (s) => String(s.id) === String(validation.values.stylist_id)
-    );
+
+  const timeMissing = !!validation.values.start_time && !timeSlots.includes(validation.values.start_time);
+
+  const stylistMissing = !!validation.values.stylist_id &&
+    !availableStylists.some((s) => String(s.id) === String(validation.values.stylist_id));
+
+  // Etiqueta amigable para cliente seleccionado (sin ID)
+  const currentClientLabel = (() => {
+    const cid = String(validation.values.client_id || "");
+    if (!cid) return "";
+    const inGlobal = clients.find((c: any) => String(c.id) === cid);
+    if (inGlobal) {
+      return `${inGlobal.first_name || ""} ${inGlobal.last_name || ""}`.trim() || "Cliente";
+    }
+    const inLocal = createdClientsMap[cid];
+    if (inLocal) {
+      return `${inLocal.first_name || ""} ${inLocal.last_name || ""}`.trim() || "Cliente";
+    }
+    return "Cliente seleccionado";
+  })();
 
   const currentStylistLabel = (() => {
     const id = validation.values.stylist_id;
@@ -527,7 +558,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
     if (f || l) return `${f || ""} ${l || ""}`.trim();
     const found = availableStylists.find((s) => String(s.id) === String(id));
     if (found) return `${found.first_name || ""} ${found.last_name || ""}`.trim();
-    return `ID ${id}`;
+    return `Estilista`;
   })();
 
   // --- RENDER ---
@@ -559,40 +590,39 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                         onChange={validation.handleChange}
                         value={validation.values.client_id}
                         disabled={isEditMode}
-                        invalid={
-                          !!(
-                            validation.touched.client_id &&
-                            validation.errors.client_id
-                          )
-                        }
+                        invalid={!!(validation.touched.client_id && validation.errors.client_id)}
                       >
                         <option value="">
                           {clients.length ? "Seleccione…" : "Cargando…"}
                         </option>
-                        {clientMissing && (
+
+                        {clientMissing && validation.values.client_id && (
                           <option value={validation.values.client_id}>
-                            Cliente actual (ID {validation.values.client_id})
+                            {currentClientLabel}
                           </option>
                         )}
+
                         {clients.map((c: any) => (
                           <option key={c.id} value={c.id}>
                             {c.first_name} {c.last_name}
                           </option>
                         ))}
                       </Input>
-                      {validation.touched.client_id &&
-                        validation.errors.client_id && (
-                          <FormFeedback className="d-block">
-                            {validation.errors.client_id}
-                          </FormFeedback>
-                        )}
+                      {validation.touched.client_id && validation.errors.client_id && (
+                        <FormFeedback className="d-block">
+                          {validation.errors.client_id as string}
+                        </FormFeedback>
+                      )}
                     </Col>
                     {!isEditMode && (
                       <Col md="auto">
                         <Button
                           color="secondary"
                           outline
-                          onClick={() => setShowClientModal(true)}
+                          onClick={() => {
+                            setShowClientModal(true);
+                            setCloseClientModalOnSave(true);
+                          }}
                           type="button"
                         >
                           <i className="ri-add-fill me-1"></i>
@@ -616,9 +646,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                     disabled={!services?.length}
                   >
                     <option value="">
-                      {services?.length
-                        ? "Seleccione un servicio..."
-                        : "Cargando servicios..."}
+                      {services?.length ? "Seleccione un servicio..." : "Cargando servicios..."}
                     </option>
                     {services?.map((s: any) => (
                       <option key={s.id} value={s.id}>
@@ -641,7 +669,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                       dateFormat: "Y-m-d",
                       altInput: true,
                       altFormat: "F j, Y",
-                      minDate: isEditMode ? undefined : "today",
+                      minDate: "today",
                     }}
                   />
                 </FormGroup>
@@ -694,7 +722,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                       </option>
                       {stylistMissing && validation.values.stylist_id && (
                         <option value={validation.values.stylist_id}>
-                          {currentStylistLabel || `Estilista actual (ID ${validation.values.stylist_id})`}
+                          {currentStylistLabel || `Estilista`}
                         </option>
                       )}
                       {availableStylists.map((stylist) => (
@@ -733,9 +761,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                               <Input
                                 type="select"
                                 value={row.service_id}
-                                onChange={(e) =>
-                                  changeExtraRow(idx, "service_id", e.target.value)
-                                }
+                                onChange={(e) => changeExtraRow(idx, "service_id", e.target.value)}
                               >
                                 <option value="">Seleccione...</option>
                                 {services.map((s: any) => (
@@ -753,14 +779,10 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                                 <Input
                                   type="select"
                                   value={row.stylist_id}
-                                  onChange={(e) =>
-                                    changeExtraRow(idx, "stylist_id", e.target.value)
-                                  }
+                                  onChange={(e) => changeExtraRow(idx, "stylist_id", e.target.value)}
                                   disabled={isLoadingThisRow || !row.service_id}
                                 >
-                                  <option value="">
-                                    {isLoadingThisRow ? "Buscando..." : "Seleccione..."}
-                                  </option>
+                                  <option value="">{isLoadingThisRow ? "Buscando..." : "Seleccione..."}</option>
                                   {stylistsForThisRow.map((s) => (
                                     <option key={s.id} value={s.id}>
                                       {s.first_name} {s.last_name}
@@ -775,11 +797,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                                   title="Digiturno para esta fila"
                                   type="button"
                                 >
-                                  {isSuggestingThisRow ? (
-                                    <Spinner size="sm" />
-                                  ) : (
-                                    <i className="ri-magic-line"></i>
-                                  )}
+                                  {isSuggestingThisRow ? <Spinner size="sm" /> : <i className="ri-magic-line"></i>}
                                 </Button>
                                 <Button
                                   color="danger"
@@ -812,13 +830,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                 Cancelar
               </Button>
               <Button type="submit" color="success" disabled={!canSubmit}>
-                {validation.isSubmitting ? (
-                  <Spinner size="sm" />
-                ) : isEditMode ? (
-                  "Guardar Cambios"
-                ) : (
-                  "Agendar Cita"
-                )}
+                {validation.isSubmitting ? <Spinner size="sm" /> : isEditMode ? "Guardar Cambios" : "Agendar Cita"}
               </Button>
             </div>
           </Form>
@@ -826,52 +838,49 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
       </Modal>
 
       {/* MODAL PARA CREAR CLIENTE */}
-      <Modal 
-        isOpen={showClientModal} 
+      <Modal
+        isOpen={showClientModal}
         toggle={() => {
           setShowClientModal(false);
           clientValidation.resetForm();
           setShowPassword(false);
-        }} 
+          setCloseClientModalOnSave(true);
+        }}
         centered
       >
-        <ModalHeader 
-          className="bg-primary-subtle p-3" 
+        <ModalHeader
+          className="bg-primary-subtle p-3"
           toggle={() => {
             setShowClientModal(false);
             clientValidation.resetForm();
             setShowPassword(false);
+            setCloseClientModalOnSave(true);
           }}
         >
           Crear Nuevo Cliente
         </ModalHeader>
+
         <Form onSubmit={clientValidation.handleSubmit}>
           <ModalBody>
             <Row className="g-3">
               <Col md={6}>
                 <Label htmlFor="first_name-field">Nombre*</Label>
                 <Input
+                  id="first_name-field"
                   name="first_name"
                   onChange={clientValidation.handleChange}
                   onBlur={clientValidation.handleBlur}
                   value={clientValidation.values.first_name}
-                  invalid={
-                    !!(
-                      clientValidation.touched.first_name &&
-                      clientValidation.errors.first_name
-                    )
-                  }
+                  invalid={!!(clientValidation.touched.first_name && clientValidation.errors.first_name)}
                 />
-                {clientValidation.touched.first_name &&
-                  clientValidation.errors.first_name && (
-                    <FormFeedback>
-                      {clientValidation.errors.first_name as string}
-                    </FormFeedback>
-                  )}
+                {clientValidation.touched.first_name && clientValidation.errors.first_name && (
+                  <FormFeedback>{clientValidation.errors.first_name as string}</FormFeedback>
+                )}
               </Col>
               <Col md={6}>
                 <Label htmlFor="last_name-field">Apellido</Label>
                 <Input
+                  id="last_name-field"
                   name="last_name"
                   onChange={clientValidation.handleChange}
                   onBlur={clientValidation.handleBlur}
@@ -881,28 +890,22 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
               <Col md={12}>
                 <Label htmlFor="email-field">Email*</Label>
                 <Input
+                  id="email-field"
                   name="email"
                   type="email"
                   onChange={clientValidation.handleChange}
                   onBlur={clientValidation.handleBlur}
                   value={clientValidation.values.email}
-                  invalid={
-                    !!(
-                      clientValidation.touched.email &&
-                      clientValidation.errors.email
-                    )
-                  }
+                  invalid={!!(clientValidation.touched.email && clientValidation.errors.email)}
                 />
-                {clientValidation.touched.email &&
-                  clientValidation.errors.email && (
-                    <FormFeedback>
-                      {clientValidation.errors.email as string}
-                    </FormFeedback>
-                  )}
+                {clientValidation.touched.email && clientValidation.errors.email && (
+                  <FormFeedback>{clientValidation.errors.email as string}</FormFeedback>
+                )}
               </Col>
               <Col md={12}>
                 <Label htmlFor="phone-field">Teléfono</Label>
                 <Input
+                  id="phone-field"
                   name="phone"
                   onChange={clientValidation.handleChange}
                   onBlur={clientValidation.handleBlur}
@@ -913,41 +916,31 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                 <Label htmlFor="password-field">Contraseña*</Label>
                 <InputGroup>
                   <Input
+                    id="password-field"
                     name="password"
                     type={showPassword ? "text" : "password"}
                     onChange={clientValidation.handleChange}
                     onBlur={clientValidation.handleBlur}
                     value={clientValidation.values.password}
-                    invalid={
-                      !!(
-                        clientValidation.touched.password &&
-                        clientValidation.errors.password
-                      )
-                    }
+                    invalid={!!(clientValidation.touched.password && clientValidation.errors.password)}
                   />
                   <button
                     className="btn btn-light"
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                   >
-                    <i
-                      className={
-                        showPassword ? "ri-eye-off-fill" : "ri-eye-fill"
-                      }
-                    ></i>
+                    <i className={showPassword ? "ri-eye-off-fill" : "ri-eye-fill"}></i>
                   </button>
-                  {clientValidation.touched.password &&
-                    clientValidation.errors.password && (
-                      <FormFeedback>
-                        {clientValidation.errors.password as string}
-                      </FormFeedback>
-                    )}
+                  {clientValidation.touched.password && clientValidation.errors.password && (
+                    <FormFeedback>{clientValidation.errors.password as string}</FormFeedback>
+                  )}
                 </InputGroup>
               </Col>
             </Row>
           </ModalBody>
-          <ModalFooter>
-            <div className="hstack gap-2 justify-content-end">
+
+          <ModalFooter className="d-flex justify-content-between">
+            <div className="hstack gap-2">
               <button
                 type="button"
                 className="btn btn-light"
@@ -955,20 +948,32 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                   setShowClientModal(false);
                   clientValidation.resetForm();
                   setShowPassword(false);
+                  setCloseClientModalOnSave(true);
                 }}
               >
                 Cancelar
               </button>
+            </div>
+
+            <div className="hstack gap-2">
+              {/* Guardar sin cerrar ESTE modal (mantenerlo abierto) */}
+              <button
+                type="submit"
+                className="btn btn-outline-primary"
+                onClick={() => setCloseClientModalOnSave(false)}
+                disabled={clientValidation.isSubmitting}
+              >
+                {clientValidation.isSubmitting ? <Spinner size="sm" /> : "Guardar y seguir"}
+              </button>
+
+              {/* Guardar y cerrar ESTE modal (comportamiento clásico) */}
               <button
                 type="submit"
                 className="btn btn-success"
+                onClick={() => setCloseClientModalOnSave(true)}
                 disabled={clientValidation.isSubmitting}
               >
-                {clientValidation.isSubmitting ? (
-                  <Spinner size="sm" />
-                ) : (
-                  "Crear Cliente"
-                )}
+                {clientValidation.isSubmitting ? <Spinner size="sm" /> : "Guardar y cerrar"}
               </button>
             </div>
           </ModalFooter>
