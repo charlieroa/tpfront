@@ -1,8 +1,3 @@
-// =============================================
-// File: src/pages/Calendar/AppointmentModal.tsx
-// (Versión completa con: bloqueo fecha pasada + ocultar horas pasadas estrictamente +
-// modal de creación de cliente con "Guardar y seguir" + sin mostrar ID de cliente recién creado)
-// =============================================
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Button,
@@ -34,7 +29,7 @@ import {
   createAppointmentsBatch as onCreateAppointmentsBatch,
   fetchTenantSlots,
   fetchAvailableStylists,
-  addNewContact, // Importar desde CRM
+  addNewContact,
 } from "../../slices/thunks";
 
 // Tipos
@@ -54,6 +49,7 @@ interface AppointmentModalProps {
   onClose: () => void;
   selectedEvent: any | null;
   defaultDate?: Date | null;
+  allowPastAppointments?: boolean; // ✅ NUEVA PROP
 }
 
 // Helpers de fecha/hora
@@ -81,6 +77,22 @@ const isSameDayLocal = (a: Date, b: Date) => {
 const hhmmToMinutes = (hhmm: string) => {
   const [h, m] = hhmm.split(":").map(Number);
   return h * 60 + m;
+};
+
+// ✅ NUEVO HELPER: Verificar si una fecha está en el pasado
+const isDateInPast = (date: Date): boolean => {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const checkDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  return checkDate < today;
+};
+
+// ✅ NUEVO HELPER: Verificar si una fecha/hora específica está en el pasado
+const isDateTimeInPast = (date: Date, time: string): boolean => {
+  const [hours, minutes] = time.split(":").map(Number);
+  const checkDateTime = new Date(date);
+  checkDateTime.setHours(hours, minutes, 0, 0);
+  return checkDateTime < new Date();
 };
 
 function normalizeSlotsPayload(payload: any): string[] {
@@ -111,6 +123,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
   onClose,
   selectedEvent,
   defaultDate,
+  allowPastAppointments = false, // ✅ DESTRUCTURAR CON DEFAULT
 }) => {
   const dispatch: any = useDispatch();
   const { clients = [], services = [] } =
@@ -136,27 +149,18 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
   const firstLoadEditRef = useRef<boolean>(false);
   const isEditMode = !!selectedEvent;
 
-  // Mapa local para mostrar nombre del cliente recién creado (sin ID)
   const [createdClientsMap, setCreatedClientsMap] = useState<Record<string, { first_name: string; last_name?: string }>>({});
-  // Control para cerrar o no el modal de cliente al guardar
   const [closeClientModalOnSave, setCloseClientModalOnSave] = useState<boolean>(true);
 
-  // ============ BLOQUEO DE APERTURA SI DEFAULTDATE < HOY ============
+  // ✅ MODIFICADO: Solo bloquear si NO está permitido y es fecha pasada
   useEffect(() => {
     if (!isOpen) return;
 
-    if (!isEditMode && defaultDate) {
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-
-      const target = new Date(defaultDate);
-      const targetStart = new Date(target);
-      targetStart.setHours(0, 0, 0, 0);
-
-      if (targetStart.getTime() < todayStart.getTime()) {
+    if (!isEditMode && defaultDate && !allowPastAppointments) {
+      if (isDateInPast(defaultDate)) {
         Swal.fire({
           title: "Fecha no válida",
-          text: "No se puede agendar porque el día ya pasó.",
+          html: "No se pueden crear citas en fechas pasadas.<br><small class='text-muted'>Si necesitas habilitar esta función, ve a Configuración.</small>",
           icon: "warning",
           confirmButtonText: "Entendido",
         });
@@ -164,7 +168,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
         return;
       }
     }
-  }, [isOpen, isEditMode, defaultDate, onClose]);
+  }, [isOpen, isEditMode, defaultDate, allowPastAppointments, onClose]);
 
   // --- FORMIK PRINCIPAL (APPOINTMENT) ---
   const validation = useFormik<AppointmentFormValues>({
@@ -194,6 +198,17 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
         const [hours, minutes] = values.start_time.split(":").map(Number);
         dateObj.setHours(hours, minutes, 0, 0);
         const utcDateTimeString = dateObj.toISOString();
+
+        // ✅ VALIDACIÓN ADICIONAL: Verificar fecha/hora pasada antes de enviar
+        if (!allowPastAppointments && isDateTimeInPast(dateObj, values.start_time)) {
+          Swal.fire({
+            icon: 'warning',
+            title: 'Fecha u hora pasada',
+            text: 'No se pueden crear citas en fechas u horas que ya pasaron.',
+          });
+          setSubmitting(false);
+          return;
+        }
 
         if (!values.client_id && !selectedEvent)
           throw new Error("Seleccione un cliente antes de continuar.");
@@ -231,7 +246,8 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
         }
         onClose();
       } catch (error: any) {
-        toast.error(error.message || "No se pudo completar la operación.");
+        const errorMsg = error?.response?.data?.error || error?.message || "No se pudo completar la operación.";
+        toast.error(errorMsg);
       } finally {
         setSubmitting(false);
       }
@@ -268,13 +284,11 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
         const resultAction = await dispatch(addNewContact(clientData));
         const newClient = unwrapResult(resultAction);
 
-        // Guardar label local para evitar mostrar "ID ..."
         setCreatedClientsMap((prev) => ({
           ...prev,
           [String(newClient.id)]: { first_name: values.first_name, last_name: values.last_name },
         }));
 
-        // Seleccionar automáticamente el nuevo cliente en el formulario principal
         validation.setFieldValue("client_id", String(newClient.id));
 
         Swal.fire({
@@ -285,14 +299,9 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
           showConfirmButton: false,
         });
 
-        // Limpiar form del cliente
         resetForm();
-
-        // Cerrar o mantener abierto según botón pulsado
-        if (closeClientModalOnSave) {
-          setShowClientModal(false);
-          setShowPassword(false);
-        }
+        setShowClientModal(false);
+        setShowPassword(false);
       } catch (err: any) {
         Swal.fire({
           title: "Error",
@@ -301,7 +310,6 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
         });
       } finally {
         setSubmitting(false);
-        setCloseClientModalOnSave(true);
       }
     },
   });
@@ -356,16 +364,18 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
         .then((payload: any) => {
           const fetched = normalizeSlotsPayload(payload);
 
-          // Filtrar horarios pasados si la fecha es HOY (estricto: > ahora)
           let filtered = fetched;
-          const selectedDate = new Date(date as any);
-          const now = new Date();
-          if (isSameDayLocal(selectedDate, now)) {
-            const currentMins = now.getHours() * 60 + now.getMinutes();
-            filtered = fetched.filter((t) => hhmmToMinutes(t) > currentMins);
+          
+          // ✅ MODIFICADO: Solo filtrar horas pasadas si NO está permitido
+          if (!allowPastAppointments) {
+            const selectedDate = new Date(date as any);
+            const now = new Date();
+            if (isSameDayLocal(selectedDate, now)) {
+              const currentMins = now.getHours() * 60 + now.getMinutes();
+              filtered = fetched.filter((t) => hhmmToMinutes(t) > currentMins);
+            }
           }
 
-          // Si la hora seleccionada quedó inválida (pasada), limpiarla
           const current = validation.values.start_time;
           const stillValid = current && filtered.includes(current);
           const merged = stillValid ? filtered : filtered;
@@ -385,7 +395,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
       setTimeSlots([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [validation.values.service_id, validation.values.date, dispatch]);
+  }, [validation.values.service_id, validation.values.date, dispatch, allowPastAppointments]);
 
   // --- Estilistas disponibles por servicio/fecha/hora ---
   useEffect(() => {
@@ -534,7 +544,6 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
   const stylistMissing = !!validation.values.stylist_id &&
     !availableStylists.some((s) => String(s.id) === String(validation.values.stylist_id));
 
-  // Etiqueta amigable para cliente seleccionado (sin ID)
   const currentClientLabel = (() => {
     const cid = String(validation.values.client_id || "");
     if (!cid) return "";
@@ -568,6 +577,13 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
       <Modal isOpen={isOpen} toggle={onClose} centered size="lg">
         <ModalHeader toggle={onClose} tag="h5" className="p-3 bg-light">
           {isEditMode ? "Editar Cita" : "Agendar Cita"}
+          {/* ✅ NUEVO: Indicador visual si modo especial está activo */}
+          {allowPastAppointments && (
+            <span className="badge bg-warning-subtle text-warning ms-2" title="Modo especial: Se permiten fechas pasadas">
+              <i className="ri-time-line me-1"></i>
+              Fechas pasadas permitidas
+            </span>
+          )}
         </ModalHeader>
         <ModalBody>
           <Form
@@ -669,7 +685,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                       dateFormat: "Y-m-d",
                       altInput: true,
                       altFormat: "F j, Y",
-                      minDate: "today",
+                      minDate: allowPastAppointments ? undefined : "today", // ✅ Condicional según setting
                     }}
                   />
                 </FormGroup>
@@ -956,24 +972,12 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
             </div>
 
             <div className="hstack gap-2">
-              {/* Guardar sin cerrar ESTE modal (mantenerlo abierto) */}
-              <button
-                type="submit"
-                className="btn btn-outline-primary"
-                onClick={() => setCloseClientModalOnSave(false)}
-                disabled={clientValidation.isSubmitting}
-              >
-                {clientValidation.isSubmitting ? <Spinner size="sm" /> : "Guardar y seguir"}
-              </button>
-
-              {/* Guardar y cerrar ESTE modal (comportamiento clásico) */}
               <button
                 type="submit"
                 className="btn btn-success"
-                onClick={() => setCloseClientModalOnSave(true)}
                 disabled={clientValidation.isSubmitting}
               >
-                {clientValidation.isSubmitting ? <Spinner size="sm" /> : "Guardar y cerrar"}
+                {clientValidation.isSubmitting ? <Spinner size="sm" /> : "Guardar"}
               </button>
             </div>
           </ModalFooter>

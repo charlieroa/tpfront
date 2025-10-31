@@ -152,13 +152,16 @@ export const fetchAvailableStylists = (date: string, time: string, serviceId: st
     const { data } = await api.get('/appointments/stylists/available', {
       params: { date, time, service_id: serviceId },
     });
-    return data?.availableStylists || [];
+
+    // 👇 Esta es la única línea que debes cambiar:
+    return data?.available || data?.availableStylists || [];
   } catch (error: any) {
     console.error("Error al obtener estilistas disponibles:", error);
     toast.error("No se pudieron cargar los estilistas para esta hora.");
     return Promise.reject(error);
   }
 };
+
 
 export const fetchAvailability = (stylistId: string, date: string) => async (dispatch: any) => {
   try {

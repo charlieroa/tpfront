@@ -40,6 +40,7 @@ type Tenant = {
     products_for_staff_enabled?: boolean;
     admin_fee_enabled?: boolean;
     loans_to_staff_enabled?: boolean;
+    allow_past_appointments?: boolean; // ✅ NUEVO CAMPO
     working_hours?: Record<string, string | null> | null;
     created_at?: string;
     updated_at?: string;
@@ -63,7 +64,6 @@ const formatCOPString = (digits: string) => {
     if (!digits) return '';
     const n = parseInt(digits, 10);
     if (!Number.isFinite(n)) return '';
-    // Quitamos el espacio que a veces añade Intl.NumberFormat (ej: "$ 50.000")
     return formatterCOP.format(n).replace(/\s/g, '');
 };
 
@@ -156,8 +156,8 @@ const ServiceModal: React.FC<{
     const [duration, setDuration] = useState<string>("");
     const [description, setDescription] = useState<string>("");
 
-    const categoryOptions = useMemo(() => 
-        categories.map(cat => ({ value: cat.id, label: cat.name })), 
+    const categoryOptions = useMemo(() =>
+        categories.map(cat => ({ value: cat.id, label: cat.name })),
     [categories]);
   
     useEffect(() => {
@@ -243,7 +243,6 @@ const ServiceModal: React.FC<{
                     <Col md={6}><Label className="form-label">Nombre del servicio</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej: Corte para Dama" /></Col>
                     <Col md={6}><Label className="form-label">Duración (minutos)</Label><Input type="number" min={1} value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="Ej: 60" /></Col>
                     
-                    {/* --- AJUSTE: Campo de precio ahora ocupa todo el ancho (md={12}) y usa formato de moneda --- */}
                     <Col md={12}>
                         <Label className="form-label">Precio</Label>
                         <Input 
@@ -254,13 +253,6 @@ const ServiceModal: React.FC<{
                             placeholder="$50.000" 
                         />
                     </Col>
-
-                    {/* --- AJUSTE: Campo de descripción comentado para ocultarlo --- */}
-                    {/* <Col md={12}>
-                        <Label className="form-label">Descripción (opcional)</Label>
-                        <Input type="textarea" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
-                    </Col>
-                    */}
                 </Row>
             </ModalBody>
             <ModalFooter>
@@ -294,6 +286,7 @@ const Settings: React.FC = () => {
     const [productsForStaff, setProductsForStaff] = useState<boolean>(true);
     const [adminFeeEnabled, setAdminFeeEnabled] = useState<boolean>(false);
     const [loansToStaff, setLoansToStaff] = useState<boolean>(false);
+    const [allowPastAppointments, setAllowPastAppointments] = useState<boolean>(false); // ✅ NUEVO ESTADO
     const [catLoading, setCatLoading] = useState(false);
     const [svcLoading, setSvcLoading] = useState(false);
     const [categories, setCategories] = useState<Category[]>([]);
@@ -334,6 +327,7 @@ const Settings: React.FC = () => {
         setProductsForStaff(tenantData.products_for_staff_enabled ?? true);
         setAdminFeeEnabled(tenantData.admin_fee_enabled ?? false);
         setLoansToStaff(tenantData.loans_to_staff_enabled ?? false);
+        setAllowPastAppointments(tenantData.allow_past_appointments ?? false); // ✅ ACTUALIZAR DESDE API
         const baseUrl = api.defaults.baseURL || '';
         let finalDisplayUrl = "";
         if (tenantData.logo_url) {
@@ -419,7 +413,9 @@ const Settings: React.FC = () => {
             products_for_staff_enabled: productsForStaff,
             admin_fee_enabled: adminFeeEnabled,
             loans_to_staff_enabled: loansToStaff,
-          };
+            // 👇 Mapea el estado camelCase al nombre esperado por la API en snake_case
+            allow_past_appointments: allowPastAppointments,
+          } as any;
     
           await api.put(`/tenants/${tenantId}`, payload);
           const { data: freshTenantData } = await api.get(`/tenants/${tenantId}`);
@@ -547,7 +543,7 @@ const Settings: React.FC = () => {
       if (!loading) {
           dispatch(setSetupProgress(progress));
       }
-  }, [progress, loading, dispatch]);
+    }, [progress, loading, dispatch]);
 
 
     const renderSvcPageNumbers = () => {
@@ -656,6 +652,7 @@ const Settings: React.FC = () => {
                           productsForStaff={productsForStaff} setProductsForStaff={setProductsForStaff}
                           adminFeeEnabled={adminFeeEnabled} setAdminFeeEnabled={setAdminFeeEnabled}
                           loansToStaff={loansToStaff} setLoansToStaff={setLoansToStaff}
+                          allowPastAppointments={allowPastAppointments} setAllowPastAppointments={setAllowPastAppointments} // ✅ PASAR COMO PROP
                           perDay={perDay} toggleDay={() => {}} changeHour={() => {}} applyMondayToAll={() => {}} 
                           saving={saving} onSubmit={handleSaveInfo} onCancel={() => updateStateFromTenant(tenant)} 
                         />
@@ -668,6 +665,7 @@ const Settings: React.FC = () => {
                           productsForStaff={productsForStaff} setProductsForStaff={setProductsForStaff}
                           adminFeeEnabled={adminFeeEnabled} setAdminFeeEnabled={setAdminFeeEnabled}
                           loansToStaff={loansToStaff} setLoansToStaff={setLoansToStaff}
+                          allowPastAppointments={allowPastAppointments} setAllowPastAppointments={setAllowPastAppointments} // ✅ PASAR COMO PROP
                           perDay={perDay} toggleDay={toggleDay} changeHour={changeHour} applyMondayToAll={applyMondayToAll} 
                           saving={saving} onSubmit={handleSaveHours} onCancel={() => updateStateFromTenant(tenant)} 
                         />
@@ -724,14 +722,13 @@ const Settings: React.FC = () => {
                           onManageCategories={() => setCategoryManagerOpen(true)}
                         />
                       </TabPane>
-                      {/* --- AJUSTE: Pasamos `services` y `categories` como props a Personal --- */}
-                     <TabPane tabId="4">
-  <Personal 
-    services={services}
-    categories={categories}
-    onStaffChange={loadStaffCount} // <-- AÑADE ESTA LÍNEA
-  />
-</TabPane>
+                      <TabPane tabId="4">
+                        <Personal 
+                          services={services}
+                          categories={categories}
+                          onStaffChange={loadStaffCount}
+                        />
+                      </TabPane>
                     </TabContent>
                   </CardBody>
                 </Card>

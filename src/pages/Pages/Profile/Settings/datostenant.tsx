@@ -29,6 +29,10 @@ export type DatosTenantProps = {
   productsForStaff: boolean; setProductsForStaff: (v: boolean) => void;
   adminFeeEnabled: boolean; setAdminFeeEnabled: (v: boolean) => void;
   loansToStaff: boolean; setLoansToStaff: (v: boolean) => void;
+  
+  // ✅ NUEVAS PROPS: Permitir citas en fechas pasadas
+  allowPastAppointments: boolean; 
+  setAllowPastAppointments: (v: boolean) => void;
 
   // Props para Horarios
   perDay: WorkingHoursPerDay;
@@ -48,6 +52,7 @@ const DatosTenant: React.FC<DatosTenantProps> = ({
   productsForStaff, setProductsForStaff,
   adminFeeEnabled, setAdminFeeEnabled,
   loansToStaff, setLoansToStaff,
+  allowPastAppointments, setAllowPastAppointments, // ✅ DESTRUCTURAR NUEVAS PROPS
   perDay, toggleDay, changeHour, applyMondayToAll,
   saving = false,
   onSubmit, onCancel,
@@ -233,7 +238,7 @@ const DatosTenant: React.FC<DatosTenantProps> = ({
             </p>
           </div>
 
-          <div className="form-check form-switch form-switch-lg mb-3">
+          <div className="form-check form-switch form-switch-lg mb-4">
             <Input 
               className="form-check-input" 
               type="checkbox" 
@@ -248,6 +253,35 @@ const DatosTenant: React.FC<DatosTenantProps> = ({
             <p className="text-muted mt-1 small">
               Activará el módulo de préstamos y adelantos en la sección de nómina.
             </p>
+          </div>
+
+          {/* ✅ NUEVO SWITCH: Permitir citas en fechas pasadas */}
+          <div className="form-check form-switch form-switch-lg mb-3">
+            <Input 
+              className="form-check-input" 
+              type="checkbox" 
+              role="switch" 
+              id="allow-past-appointments-switch" 
+              checked={allowPastAppointments} 
+              onChange={(e) => setAllowPastAppointments(e.target.checked)} 
+            />
+            <Label className="form-check-label" htmlFor="allow-past-appointments-switch">
+              Permitir agendar citas en fechas u horas pasadas
+            </Label>
+            <div className="mt-1">
+              {allowPastAppointments ? (
+                <div className="alert alert-warning py-2 px-3 mb-0" role="alert">
+                  <i className="ri-alert-line me-1"></i>
+                  <strong>Modo especial activo:</strong> Se pueden crear y modificar citas en fechas pasadas. 
+                  Útil para registrar citas que ya ocurrieron o corregir el historial.
+                </div>
+              ) : (
+                <small className="text-muted">
+                  <i className="ri-information-line me-1"></i>
+                  Desactivado (recomendado). No se pueden crear citas en fechas u horas que ya pasaron.
+                </small>
+              )}
+            </div>
           </div>
         </Col>
       </Row>
