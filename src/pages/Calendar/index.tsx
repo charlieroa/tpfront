@@ -16,12 +16,14 @@ import Swal from "sweetalert2";
 // ⬇️ Hook de sockets
 import useCalendarSocket from "../../hooks/useCalendarSocket";
 
-// Thunks
+// ✅ Thunks de Calendar
 import {
   getCalendarData as onGetCalendarData,
   updateAppointment as onUpdateAppointment,
-  fetchTenantSettings,
 } from "../../slices/thunks";
+
+// ✅ Thunk de Settings (importado directamente)
+import { fetchTenantSettings } from "../../slices/Settings/settingsSlice";
 
 // Componentes
 import BreadCrumb from "../../Components/Common/BreadCrumb";
@@ -74,20 +76,17 @@ const Calendar = () => {
 
   const { events, loading, tenantWorkingHours } = useSelector((state: any) => state.Calendar);
 
-  // ✅ Normalizar bandera desde Settings (acepta camelCase, snake_case y posibles anidaciones)
-  const settingsRoot = useSelector((state: any) => state.Settings ?? state.settings ?? {});
-  const settings = (settingsRoot?.data ?? settingsRoot) as any;
-  const settingsLoaded: boolean = Boolean(
-    settingsRoot?.loaded ?? settingsRoot?.isLoaded ?? Object.keys(settings || {}).length
-  );
+  // ✅ Lee directamente desde el slice de Settings
+  const settingsState = useSelector((state: any) => state.Settings || state.settings);
+  const settingsLoaded = settingsState?.loaded === true;
+  const allowPastAppointments = settingsState?.data?.allow_past_appointments ?? false;
 
-  const allowPastAppointments: boolean = Boolean(
-    settings?.allowPastAppointments ??
-      settings?.allow_past_appointments ??
-      settings?.tenant?.allowPastAppointments ??
-      settings?.tenant?.allow_past_appointments ??
-      false
-  );
+  // ✅ Debug temporal (puedes quitar esto después de verificar que funciona)
+  console.log('🔍 [Calendar] Settings:', {
+    settingsLoaded,
+    allowPastAppointments,
+    'settingsState.data': settingsState?.data
+  });
 
   // Toma tenantId desde tu store
   const auth = useSelector((s: any) => s.Auth || s.auth || {});
