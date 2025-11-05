@@ -103,10 +103,13 @@
     "yet-another-react-lightbox": "^3.21.6",
     "yup": "^1.4.0"
   },
-  "scripts": {
-    "start": "cross-env PORT=3001 react-scripts start",
-    "build": "cross-env NODE_ENV=production react-app-rewired build",
-    "test": "react-app-rewired test"
+   "scripts": {
+    "start": "cross-env PORT=3001 react-scripts start",              
+    "build": "cross-env NODE_ENV=production react-app-rewired build", 
+    "start:prod": "npx serve -s build -l 3001",                      
+
+    "pm2:init": "pm2 delete frontend || true && pm2 serve build 3001 --spa --name frontend && pm2 save",
+    "deploy": "npm run build && pm2 restart frontend"
   },
   "eslintConfig": {
     "extends": [
