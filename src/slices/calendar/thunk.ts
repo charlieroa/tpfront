@@ -16,10 +16,13 @@ import {
   clearSlots as clearSlotsAction,
   updateAppointmentSuccess,
   updateAppointmentFail,
-  // --- (1) IMPORTAR LAS NUEVAS ACCIONES DEL REDUCER ---
   fetchTenantSettingsStart,
   fetchTenantSettingsSuccess,
   fetchTenantSettingsFail,
+  // 🎯 NUEVO: Importar acciones para digiturno
+  fetchDigiturnoQueueStart,
+  fetchDigiturnoQueueSuccess,
+  fetchDigiturnoQueueFail,
 } from "./reducer";
 
 // ✅ Colores por estado (Sin cambios)
@@ -52,18 +55,33 @@ const getTenantId = () => {
 };
 
 
-// --- (2) NUEVO THUNK PARA OBTENER HORARIO DEL NEGOCIO ---
+// --- THUNK PARA OBTENER HORARIO DEL NEGOCIO ---
 export const fetchTenantSettings = () => async (dispatch: any) => {
   dispatch(fetchTenantSettingsStart());
   try {
     const tenantId = getTenantId();
-    // Este endpoint debe devolver los datos del tenant, incluyendo `working_hours`
     const response = await api.get(`/tenants/${tenantId}`);
     dispatch(fetchTenantSettingsSuccess(response.data));
     return response.data;
   } catch (error: any) {
     const message = error.response?.data?.message || "Error al cargar la configuración del negocio";
     dispatch(fetchTenantSettingsFail(message));
+    return Promise.reject(message);
+  }
+};
+
+// 🎯 NUEVO: THUNK PARA OBTENER COLA DEL DIGITURNO
+export const fetchDigiturnoQueue = (tenantId: string) => async (dispatch: any) => {
+  dispatch(fetchDigiturnoQueueStart());
+  try {
+    const response = await api.get(`/appointments/digiturno/queue/${tenantId}`);
+    const queue = response.data?.queue || [];
+    dispatch(fetchDigiturnoQueueSuccess(queue));
+    return queue;
+  } catch (error: any) {
+    const message = error.response?.data?.error || error.message || "Error al obtener cola del digiturno";
+    dispatch(fetchDigiturnoQueueFail(message));
+    console.error("Error fetching digiturno queue:", error);
     return Promise.reject(message);
   }
 };
@@ -153,7 +171,6 @@ export const fetchAvailableStylists = (date: string, time: string, serviceId: st
       params: { date, time, service_id: serviceId },
     });
 
-    // 👇 Esta es la única línea que debes cambiar:
     return data?.available || data?.availableStylists || [];
   } catch (error: any) {
     console.error("Error al obtener estilistas disponibles:", error);

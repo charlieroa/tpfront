@@ -1,15 +1,14 @@
-// Contenido para: src/pages/DashboardPrincipal/index.tsx
-
 import React, { useState } from 'react';
 import { Container, Nav, NavItem, NavLink, TabContent, TabPane } from 'reactstrap';
 import classnames from 'classnames';
 
 // Importamos los componentes que actuarán como el contenido de nuestras pestañas
 import Calendar from '../Calendar';
-import DashboardCrm from '../DashboardCrm';
+import Geolocalizacion from '../Geolocalizacion';
+import ReportesYFichero from '../ReportesYFichero';
 
 // Interfaz vacía para mantener la estructura de TypeScript, aunque no recibimos props.
-interface IProps {}
+interface IProps { }
 
 const DashboardPrincipal: React.FC<IProps> = () => {
     document.title = "Dashboard | Sistema de Peluquerías";
@@ -26,7 +25,7 @@ const DashboardPrincipal: React.FC<IProps> = () => {
     return (
         <React.Fragment>
             {/* Contenedor principal con la clase de anulación para eliminar el padding */}
-            <div className="page-content page-content-flush"> 
+            <div className="page-content page-content-flush">
                 <Container fluid>
                     {/* El sistema de Pestañas (Tabs) */}
                     <Nav tabs className="nav-tabs-custom nav-success mb-3">
@@ -39,18 +38,24 @@ const DashboardPrincipal: React.FC<IProps> = () => {
                                 <i className="ri-calendar-2-line me-1"></i> Calendario y Caja
                             </NavLink>
                         </NavItem>
-
-                        {/* --- BOTÓN DE NAVEGACIÓN DE REPORTES COMENTADO --- */}
-                        {/* <NavItem>
+                        <NavItem>
                             <NavLink
                                 style={{ cursor: "pointer" }}
                                 className={classnames({ active: activeTab === '2' })}
                                 onClick={() => { toggleTab('2'); }}
                             >
-                                <i className="ri-bar-chart-2-line me-1"></i> Reportes
+                                <i className="ri-map-pin-user-line me-1"></i> Geolocalización
                             </NavLink>
                         </NavItem>
-                        */}
+                        <NavItem>
+                            <NavLink
+                                style={{ cursor: "pointer" }}
+                                className={classnames({ active: activeTab === '3' })}
+                                onClick={() => { toggleTab('3'); }}
+                            >
+                                <i className="ri-file-list-3-line me-1"></i> Reportes y Fichero
+                            </NavLink>
+                        </NavItem>
                     </Nav>
 
                     {/* El contenido de las pestañas */}
@@ -59,12 +64,12 @@ const DashboardPrincipal: React.FC<IProps> = () => {
                             {/* Renderizamos el componente del Calendario */}
                             <Calendar />
                         </TabPane>
-
-                        {/* --- CONTENIDO DE REPORTES COMENTADO --- */}
-                        {/* <TabPane tabId="2">
-                            <DashboardCrm /> 
+                        <TabPane tabId="2">
+                            <Geolocalizacion />
                         </TabPane>
-                        */}
+                        <TabPane tabId="3">
+                            <ReportesYFichero />
+                        </TabPane>
                     </TabContent>
                 </Container>
             </div>

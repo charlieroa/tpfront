@@ -22,8 +22,9 @@ import { toast } from "react-toastify";
 import { useDispatch, useSelector } from "react-redux";
 import { unwrapResult } from '@reduxjs/toolkit';
 import Swal from 'sweetalert2';
+import axios from 'axios';
 
-// Thunks activos
+// Thunks
 import {
   updateAppointment as onUpdateAppointment,
   createAppointmentsBatch as onCreateAppointmentsBatch,
@@ -41,15 +42,31 @@ interface AppointmentFormValues {
   start_time: string;
 }
 
-type Stylist = { id: string | number; first_name?: string; last_name?: string };
+// Definición de Estilista con la bandera clave
+type Stylist = {
+  id: string | number;
+  first_name?: string;
+  last_name?: string;
+  is_busy?: boolean;
+};
+
 type ExtraRow = { service_id: string; stylist_id: string };
+
+interface DigiturnoQueueItem {
+  service_id: string;
+  stylist_id: string;
+  stylist_name: string;
+  order: number;
+  last_completed_at: string | null;
+  total_completed: number;
+}
 
 interface AppointmentModalProps {
   isOpen: boolean;
   onClose: () => void;
   selectedEvent: any | null;
   defaultDate?: Date | null;
-  allowPastAppointments?: boolean; // ✅ NUEVA PROP
+  allowPastAppointments?: boolean;
 }
 
 // Helpers de fecha/hora
@@ -79,7 +96,6 @@ const hhmmToMinutes = (hhmm: string) => {
   return h * 60 + m;
 };
 
-// ✅ NUEVO HELPER: Verificar si una fecha está en el pasado
 const isDateInPast = (date: Date): boolean => {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -87,7 +103,6 @@ const isDateInPast = (date: Date): boolean => {
   return checkDate < today;
 };
 
-// ✅ NUEVO HELPER: Verificar si una fecha/hora específica está en el pasado
 const isDateTimeInPast = (date: Date, time: string): boolean => {
   const [hours, minutes] = time.split(":").map(Number);
   const checkDateTime = new Date(date);
@@ -123,54 +138,58 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
   onClose,
   selectedEvent,
   defaultDate,
-  allowPastAppointments = false, // ✅ DESTRUCTURAR CON DEFAULT
+  allowPastAppointments = false,
 }) => {
   const dispatch: any = useDispatch();
   const { clients = [], services = [] } =
     useSelector((state: any) => state.calendar || state.Calendar || {}) || {};
 
-  // ================== ESTADOS ==================
+  const tenantId = useSelector((state: any) => state.Login?.user?.tenant_id);
+
+  // Estados
   const [showClientModal, setShowClientModal] = useState<boolean>(false);
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [extraRows, setExtraRows] = useState<ExtraRow[]>([]);
-
   const [timeSlots, setTimeSlots] = useState<string[]>([]);
   const [isLoadingTimeSlots, setIsLoadingTimeSlots] = useState<boolean>(false);
-
   const [availableStylists, setAvailableStylists] = useState<Stylist[]>([]);
   const [isLoadingStylists, setIsLoadingStylists] = useState<boolean>(false);
-
   const [availableStylistsRows, setAvailableStylistsRows] = useState<Record<number, Stylist[]>>({});
   const [isLoadingStylistsRows, setIsLoadingStylistsRows] = useState<Record<number, boolean>>({});
-
   const [isSuggestingMain, setIsSuggestingMain] = useState<boolean>(false);
   const [isSuggestingRow, setIsSuggestingRow] = useState<Record<number, boolean>>({});
+  const [digiturnoQueue, setDigiturnoQueue] = useState<DigiturnoQueueItem[]>([]);
+  const [createdClientsMap, setCreatedClientsMap] = useState<Record<string, { first_name: string; last_name?: string }>>({});
+  const [closeClientModalOnSave, setCloseClientModalOnSave] = useState<boolean>(true);
 
   const firstLoadEditRef = useRef<boolean>(false);
   const isEditMode = !!selectedEvent;
 
-  const [createdClientsMap, setCreatedClientsMap] = useState<Record<string, { first_name: string; last_name?: string }>>({});
-  const [closeClientModalOnSave, setCloseClientModalOnSave] = useState<boolean>(true);
+  // Cargar cola de digiturno (informativo)
+  useEffect(() => {
+    if (isOpen && tenantId) {
+      axios.get(`/api/appointments/digiturno/queue/${tenantId}`)
+        .then((response) => setDigiturnoQueue(response.data.queue || []))
+        .catch((err) => console.error('Error Digiturno Queue:', err));
+    }
+  }, [isOpen, tenantId]);
 
-  // ✅ MODIFICADO: Solo bloquear si NO está permitido y es fecha pasada
   useEffect(() => {
     if (!isOpen) return;
-
     if (!isEditMode && defaultDate && !allowPastAppointments) {
       if (isDateInPast(defaultDate)) {
         Swal.fire({
           title: "Fecha no válida",
-          html: "No se pueden crear citas en fechas pasadas.<br><small class='text-muted'>Si necesitas habilitar esta función, ve a Configuración.</small>",
+          html: "No se pueden crear citas en fechas pasadas.",
           icon: "warning",
           confirmButtonText: "Entendido",
         });
         onClose();
-        return;
       }
     }
   }, [isOpen, isEditMode, defaultDate, allowPastAppointments, onClose]);
 
-  // --- FORMIK PRINCIPAL (APPOINTMENT) ---
+  // Formik Principal
   const validation = useFormik<AppointmentFormValues>({
     enableReinitialize: true,
     validationSchema: Yup.object({
@@ -199,132 +218,41 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
         dateObj.setHours(hours, minutes, 0, 0);
         const utcDateTimeString = dateObj.toISOString();
 
-        // ✅ VALIDACIÓN ADICIONAL: Verificar fecha/hora pasada antes de enviar
         if (!allowPastAppointments && isDateTimeInPast(dateObj, values.start_time)) {
-          Swal.fire({
-            icon: 'warning',
-            title: 'Fecha u hora pasada',
-            text: 'No se pueden crear citas en fechas u horas que ya pasaron.',
-          });
+          Swal.fire({ icon: 'warning', title: 'Fecha pasada', text: 'No se pueden crear citas en el pasado.' });
           setSubmitting(false);
           return;
         }
-
-        if (!values.client_id && !selectedEvent)
-          throw new Error("Seleccione un cliente antes de continuar.");
+        if (!values.client_id && !selectedEvent) throw new Error("Seleccione un cliente.");
 
         if (selectedEvent) {
-          await dispatch(
-            onUpdateAppointment({
-              id: selectedEvent.id,
-              client_id: selectedEvent.client_id,
-              service_id: values.service_id,
-              stylist_id: values.stylist_id,
-              start_time: utcDateTimeString,
-            })
-          );
-          toast.success("Cita actualizada exitosamente");
+          await dispatch(onUpdateAppointment({
+            id: selectedEvent.id,
+            client_id: selectedEvent.client_id,
+            service_id: values.service_id,
+            stylist_id: values.stylist_id,
+            start_time: utcDateTimeString,
+          }));
+          toast.success("Cita actualizada");
         } else {
           const allAppointments = [
-            {
-              service_id: values.service_id,
-              stylist_id: values.stylist_id,
-              start_time: utcDateTimeString,
-            },
-            ...extraRows
-              .filter((r) => r.service_id && r.stylist_id)
-              .map((r) => ({ ...r, start_time: utcDateTimeString })),
+            { service_id: values.service_id, stylist_id: values.stylist_id, start_time: utcDateTimeString },
+            ...extraRows.filter((r) => r.service_id && r.stylist_id).map((r) => ({ ...r, start_time: utcDateTimeString })),
           ];
-
-          await dispatch(
-            onCreateAppointmentsBatch({
-              client_id: values.client_id,
-              appointments: allAppointments,
-            })
-          );
-          toast.success("Cita(s) agendada(s) exitosamente");
+          await dispatch(onCreateAppointmentsBatch({ client_id: values.client_id, appointments: allAppointments }));
+          toast.success("Cita(s) agendada(s)");
         }
         onClose();
       } catch (error: any) {
-        const errorMsg = error?.response?.data?.error || error?.message || "No se pudo completar la operación.";
-        toast.error(errorMsg);
+        toast.error(error?.message || "Error al agendar.");
       } finally {
         setSubmitting(false);
       }
     },
   });
 
-  // --- FORMIK PARA CREAR CLIENTE ---
-  const clientValidation = useFormik({
-    enableReinitialize: true,
-    initialValues: {
-      first_name: "",
-      last_name: "",
-      email: "",
-      phone: "",
-      password: "",
-    },
-    validationSchema: Yup.object({
-      first_name: Yup.string().required("El nombre es obligatorio"),
-      email: Yup.string().email("Debe ser un email válido").required("El email es obligatorio"),
-      phone: Yup.string().optional(),
-      password: Yup.string().min(6, "La contraseña debe tener al menos 6 caracteres").required("La contraseña es obligatoria"),
-    }),
-    onSubmit: async (values, { setSubmitting, resetForm }) => {
-      setSubmitting(true);
-      try {
-        const clientData = {
-          first_name: values.first_name,
-          last_name: values.last_name,
-          email: values.email,
-          phone: values.phone,
-          password: values.password,
-        };
-
-        const resultAction = await dispatch(addNewContact(clientData));
-        const newClient = unwrapResult(resultAction);
-
-        setCreatedClientsMap((prev) => ({
-          ...prev,
-          [String(newClient.id)]: { first_name: values.first_name, last_name: values.last_name },
-        }));
-
-        validation.setFieldValue("client_id", String(newClient.id));
-
-        Swal.fire({
-          title: "¡Éxito!",
-          text: "Cliente creado con éxito.",
-          icon: "success",
-          timer: 1600,
-          showConfirmButton: false,
-        });
-
-        resetForm();
-        setShowClientModal(false);
-        setShowPassword(false);
-      } catch (err: any) {
-        Swal.fire({
-          title: "Error",
-          text: err?.error || "Ocurrió un error al crear el cliente",
-          icon: "error",
-        });
-      } finally {
-        setSubmitting(false);
-      }
-    },
-  });
-
-  // --- Reset / Preparación del modal ---
+  // Reset al abrir
   useEffect(() => {
-    const resetState = () => {
-      validation.resetForm();
-      setExtraRows([]);
-      setTimeSlots([]);
-      setAvailableStylists([]);
-      setAvailableStylistsRows({});
-      setCreatedClientsMap({});
-    };
-
     if (isOpen) {
       if (selectedEvent) {
         firstLoadEditRef.current = true;
@@ -339,34 +267,29 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
           start_time: toHHmmLocal(start_time),
         });
       } else if (defaultDate) {
-        const d = new Date(defaultDate);
-        validation.setFieldValue("date", d);
+        validation.setFieldValue("date", new Date(defaultDate));
       }
     } else {
-      resetState();
+      validation.resetForm();
+      setExtraRows([]);
+      setTimeSlots([]);
+      setAvailableStylists([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, selectedEvent, defaultDate]);
 
-  // --- Slots por servicio/fecha ---
+  // Cargar Slots
   useEffect(() => {
     const { service_id, date } = validation.values;
-
-    if (!(isEditMode && firstLoadEditRef.current)) {
-      validation.setFieldValue("start_time", "");
-    }
+    if (!(isEditMode && firstLoadEditRef.current)) validation.setFieldValue("start_time", "");
 
     if (service_id && date) {
       setIsLoadingTimeSlots(true);
       const dateStr = toYyyyMmDd(date);
-
       dispatch(fetchTenantSlots(dateStr, service_id))
         .then((payload: any) => {
           const fetched = normalizeSlotsPayload(payload);
-
           let filtered = fetched;
-          
-          // ✅ MODIFICADO: Solo filtrar horas pasadas si NO está permitido
           if (!allowPastAppointments) {
             const selectedDate = new Date(date as any);
             const now = new Date();
@@ -375,56 +298,32 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
               filtered = fetched.filter((t) => hhmmToMinutes(t) > currentMins);
             }
           }
-
           const current = validation.values.start_time;
-          const stillValid = current && filtered.includes(current);
-          const merged = stillValid ? filtered : filtered;
-
-          if (!stillValid && current) {
-            validation.setFieldValue("start_time", "");
-          }
-
-          setTimeSlots(merged);
+          if (!filtered.includes(current) && current) validation.setFieldValue("start_time", "");
+          setTimeSlots(filtered);
         })
-        .catch(() => setTimeSlots([]))
-        .finally(() => {
-          setIsLoadingTimeSlots(false);
-          if (firstLoadEditRef.current) firstLoadEditRef.current = false;
-        });
+        .finally(() => setIsLoadingTimeSlots(false));
     } else {
       setTimeSlots([]);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [validation.values.service_id, validation.values.date, dispatch, allowPastAppointments]);
+  }, [validation.values.service_id, validation.values.date, dispatch]);
 
-  // --- Estilistas disponibles por servicio/fecha/hora ---
+  // =========================================================
+  // CARGA DE ESTILISTAS (LÓGICA SIMPLE, EL ORDEN SE HACE EN MEMO)
+  // =========================================================
   useEffect(() => {
     const { service_id, date, start_time } = validation.values;
-
-    if (!(isEditMode && firstLoadEditRef.current)) {
-      validation.setFieldValue("stylist_id", "");
-    }
+    if (!(isEditMode && firstLoadEditRef.current)) validation.setFieldValue("stylist_id", "");
 
     if (service_id && date && start_time) {
       setIsLoadingStylists(true);
       const dateStr = toYyyyMmDd(date);
+
       dispatch(fetchAvailableStylists(dateStr, start_time, service_id))
         .then((stylists: Stylist[]) => {
-          const currentId = validation.values.stylist_id;
-          const hasCurrent = stylists.some((s) => String(s.id) === String(currentId));
-          const merged = hasCurrent
-            ? stylists
-            : currentId
-            ? [
-                {
-                  id: currentId,
-                  first_name: currentStylistLabel || "Actual",
-                  last_name: currentStylistLabel ? "" : "(asignado)",
-                },
-                ...stylists,
-              ]
-            : stylists;
-          setAvailableStylists(merged);
+          // Guardamos la respuesta tal cual del backend (sin alterar orden aún)
+          console.log("📥 Estilistas recibidos del backend:", stylists);
+          setAvailableStylists(stylists);
         })
         .catch(() => setAvailableStylists([]))
         .finally(() => {
@@ -434,556 +333,163 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
     } else {
       setAvailableStylists([]);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [validation.values.service_id, validation.values.date, validation.values.start_time, dispatch]);
 
-  // --- Cambio de servicio en filas extra ---
-  const handleExtraRowServiceChange = (rowIndex: number, newServiceId: string) => {
-    setExtraRows((rows) =>
-      rows.map((row, i) => (i === rowIndex ? { service_id: newServiceId, stylist_id: "" } : row))
-    );
-    setAvailableStylistsRows((prev) => ({ ...prev, [rowIndex]: [] }));
+  // =========================================================
+  // 🔥 ORDENAMIENTO VISUAL FORZADO (MEMOIZADO) 🔥
+  // =========================================================
+  const sortedStylistsForDropdown = useMemo(() => {
+    if (!availableStylists || availableStylists.length === 0) return [];
+
+    // Creamos una copia para ordenar
+    const sorted = [...availableStylists].sort((a, b) => {
+      // Convertimos a booleano seguro
+      const aBusy = Boolean(a.is_busy);
+      const bBusy = Boolean(b.is_busy);
+
+      // Queremos: Falsos (Libres) primero, Verdaderos (Ocupados) después
+      if (aBusy === bBusy) return 0; // Si son iguales, respeta orden del backend
+      return aBusy ? 1 : -1; // True va al final (1), False al principio (-1)
+    });
+
+    console.log("🔄 Lista Reordenada para UI (Libres primero):", sorted.map(s => `${s.first_name} (${s.is_busy})`));
+
+    // Si hay un estilista seleccionado, lo ponemos al principio siempre (para que aparezca seleccionado)
+    const currentId = validation.values.stylist_id;
+    if (currentId && !sorted.find(s => String(s.id) === String(currentId))) {
+      // Si el seleccionado no está en la lista (raro), no hacemos nada especial
+      return sorted;
+    }
+
+    return sorted;
+  }, [availableStylists, validation.values.stylist_id]);
+
+  // Helpers
+  const isStylistUsedElsewhere = (stylistId: string | number) => {
+    return extraRows.some((r) => String(r.stylist_id) === String(stylistId));
   };
 
-  // --- Estilistas disponibles por fila extra ---
-  useEffect(() => {
-    const { date, start_time } = validation.values;
-    if (date && start_time) {
-      extraRows.forEach((row, index) => {
-        if (row.service_id) {
-          setIsLoadingStylistsRows((prev) => ({ ...prev, [index]: true }));
-          const dateStr = toYyyyMmDd(date);
-          dispatch(fetchAvailableStylists(dateStr, start_time, row.service_id))
-            .then((stylists: Stylist[]) => {
-              setAvailableStylistsRows((prev) => ({ ...prev, [index]: stylists }));
-            })
-            .finally(() =>
-              setIsLoadingStylistsRows((prev) => ({ ...prev, [index]: false }))
-            );
-        }
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [validation.values.date, validation.values.start_time, extraRows.map((r) => r.service_id).join(), dispatch]);
-
-  // --- Digiturno (principal) ---
-  const isStylistUsedElsewhere = (stylistId: string | number, selfIndex?: number) => {
-    const idStr = String(stylistId);
-    if (selfIndex === undefined) {
-      return extraRows.some((r) => String(r.stylist_id) === idStr);
-    }
-    if (String(validation.values.stylist_id) === idStr) return true;
-    return extraRows.some((r, i) => i !== selfIndex && String(r.stylist_id) === idStr);
-  };
-
+  // DIGITURNO
   const handleSuggestMain = async () => {
     const { service_id, date, start_time } = validation.values;
-    if (!service_id || !date || !start_time) {
-      toast.info("Selecciona servicio, fecha y hora antes de usar Digiturno.");
-      return;
-    }
+    if (!service_id || !date || !start_time) return toast.info("Complete los datos primero.");
     setIsSuggestingMain(true);
     try {
       const dateStr = toYyyyMmDd(date);
+      // Pedimos de nuevo para tener el orden fresco "Justo" del backend
       const stylists: Stylist[] = await dispatch(fetchAvailableStylists(dateStr, start_time, service_id));
-      const nextStylist = stylists.find((s) => !isStylistUsedElsewhere(s.id));
+
+      // Lógica de asignación: El primero que NO esté ocupado y NO esté usado
+      const nextStylist = stylists.find(s => !s.is_busy && !isStylistUsedElsewhere(s.id));
+
       if (nextStylist) {
         validation.setFieldValue("stylist_id", String(nextStylist.id));
-        toast.success(`Digiturno asignó a: ${nextStylist.first_name || ""}`);
+        toast.success(`🎯 Asignado: ${nextStylist.first_name}`);
       } else {
-        toast.error("No hay estilistas disponibles que no estén ya asignados en otro servicio.");
+        toast.warning("Todos los estilistas están ocupados.");
       }
-    } finally {
-      setIsSuggestingMain(false);
-    }
+    } catch (e) { toast.error("Error al consultar digiturno"); }
+    finally { setIsSuggestingMain(false); }
   };
 
-  // --- Digiturno (fila extra) ---
-  const handleSuggestForRow = async (rowIndex: number) => {
-    const { date, start_time } = validation.values;
-    const { service_id } = extraRows[rowIndex] || {};
-    if (!service_id || !date || !start_time) {
-      toast.info("Selecciona servicio, fecha y hora antes de usar Digiturno en esta fila.");
-      return;
-    }
-    setIsSuggestingRow((p) => ({ ...p, [rowIndex]: true }));
-    try {
-      const dateStr = toYyyyMmDd(date);
-      const stylists: Stylist[] = await dispatch(fetchAvailableStylists(dateStr, start_time, service_id));
-      const nextStylist = stylists.find((s) => !isStylistUsedElsewhere(s.id, rowIndex));
-      if (nextStylist) {
-        setExtraRows((rows) => rows.map((r, i) => (i === rowIndex ? { ...r, stylist_id: String(nextStylist.id) } : r)));
-        toast.success(`Digiturno asignó a: ${nextStylist.first_name || ""}`);
-      } else {
-        toast.error("No hay estilistas disponibles para esta fila.");
-      }
-    } finally {
-      setIsSuggestingRow((p) => ({ ...p, [rowIndex]: false }));
-    }
-  };
-
-  // --- Helpers UI ---
-  const addExtraRow = () => setExtraRows((prev) => [...prev, { service_id: "", stylist_id: "" }]);
-  const removeExtraRow = (idx: number) => setExtraRows((prev) => prev.filter((_, i) => i !== idx));
-  const changeExtraRow = (idx: number, field: keyof ExtraRow, value: string) => {
-    if (field === "service_id") {
-      handleExtraRowServiceChange(idx, value);
-    } else {
-      setExtraRows((prev) => prev.map((r, i) => (i === idx ? { ...r, [field]: value } : r)));
-    }
-  };
-
+  // UI Helpers
   const canSubmit = useMemo(() => validation.isValid && !validation.isSubmitting, [validation.isValid, validation.isSubmitting]);
-
-  // === Fallbacks ===
-  const clientMissing = !!validation.values.client_id &&
-    !clients.some((c: any) => String(c.id) === String(validation.values.client_id));
-
-  const timeMissing = !!validation.values.start_time && !timeSlots.includes(validation.values.start_time);
-
-  const stylistMissing = !!validation.values.stylist_id &&
-    !availableStylists.some((s) => String(s.id) === String(validation.values.stylist_id));
-
-  const currentClientLabel = (() => {
-    const cid = String(validation.values.client_id || "");
-    if (!cid) return "";
-    const inGlobal = clients.find((c: any) => String(c.id) === cid);
-    if (inGlobal) {
-      return `${inGlobal.first_name || ""} ${inGlobal.last_name || ""}`.trim() || "Cliente";
-    }
-    const inLocal = createdClientsMap[cid];
-    if (inLocal) {
-      return `${inLocal.first_name || ""} ${inLocal.last_name || ""}`.trim() || "Cliente";
-    }
-    return "Cliente seleccionado";
-  })();
-
   const currentStylistLabel = (() => {
     const id = validation.values.stylist_id;
     if (!id) return "";
-    const ev = selectedEvent || {};
-    const f = ev.stylist_first_name || ev.stylist?.first_name || ev.first_name;
-    const l = ev.stylist_last_name || ev.stylist?.last_name || ev.last_name;
-    if (f || l) return `${f || ""} ${l || ""}`.trim();
     const found = availableStylists.find((s) => String(s.id) === String(id));
-    if (found) return `${found.first_name || ""} ${found.last_name || ""}`.trim();
-    return `Estilista`;
+    if (found) return `${found.first_name || ""} ${found.last_name || ""}`;
+    return `Estilista Seleccionado`;
   })();
 
-  // --- RENDER ---
   return (
-    <>
-      {/* MODAL PRINCIPAL DE APPOINTMENT */}
-      <Modal isOpen={isOpen} toggle={onClose} centered size="lg">
-        <ModalHeader toggle={onClose} tag="h5" className="p-3 bg-light">
-          {isEditMode ? "Editar Cita" : "Agendar Cita"}
-          {/* ✅ NUEVO: Indicador visual si modo especial está activo */}
-          {allowPastAppointments && (
-            <span className="badge bg-warning-subtle text-warning ms-2" title="Modo especial: Se permiten fechas pasadas">
-              <i className="ri-time-line me-1"></i>
-              Fechas pasadas permitidas
-            </span>
-          )}
-        </ModalHeader>
-        <ModalBody>
-          <Form
-            onSubmit={(e) => {
-              e.preventDefault();
-              validation.handleSubmit();
-            }}
-            className="text-start"
-          >
-            <Row className="g-3">
-              {/* ================= Cliente ================= */}
-              <Col xs={12}>
-                <FormGroup className="mb-0">
-                  <Label>Cliente*</Label>
-                  <Row className="g-2 align-items-end">
-                    <Col md={isEditMode ? 12 : 9}>
-                      <Input
-                        type="select"
-                        name="client_id"
-                        onChange={validation.handleChange}
-                        value={validation.values.client_id}
-                        disabled={isEditMode}
-                        invalid={!!(validation.touched.client_id && validation.errors.client_id)}
+    <Modal isOpen={isOpen} toggle={onClose} centered size="lg">
+      <ModalHeader toggle={onClose} className="bg-light">
+        {isEditMode ? "Editar Cita" : "Agendar Cita"}
+      </ModalHeader>
+      <ModalBody>
+        <Form onSubmit={(e) => { e.preventDefault(); validation.handleSubmit(); }}>
+          <Row className="g-3">
+            {/* Cliente */}
+            <Col xs={12}>
+              <FormGroup>
+                <Label>Cliente*</Label>
+                <Input type="select" name="client_id" onChange={validation.handleChange} value={validation.values.client_id} disabled={isEditMode}>
+                  <option value="">Seleccione...</option>
+                  {clients.map((c: any) => <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>)}
+                </Input>
+              </FormGroup>
+            </Col>
+
+            {/* Servicio */}
+            <Col xs={12}>
+              <FormGroup>
+                <Label>Servicio*</Label>
+                <Input type="select" name="service_id" onChange={validation.handleChange} value={validation.values.service_id}>
+                  <option value="">Seleccione...</option>
+                  {services.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </Input>
+              </FormGroup>
+            </Col>
+
+            {/* Fecha/Hora */}
+            <Col md={6}>
+              <FormGroup>
+                <Label>Fecha*</Label>
+                <Flatpickr className="form-control" value={validation.values.date as any} onChange={([d]) => validation.setFieldValue("date", d)} options={{ dateFormat: "Y-m-d", minDate: "today" }} />
+              </FormGroup>
+            </Col>
+            <Col md={6}>
+              <FormGroup>
+                <Label>Hora*</Label>
+                <Input type="select" name="start_time" onChange={validation.handleChange} value={validation.values.start_time} disabled={isLoadingTimeSlots}>
+                  <option value="">Seleccione...</option>
+                  {timeSlots.map(t => <option key={t} value={t}>{t}</option>)}
+                </Input>
+              </FormGroup>
+            </Col>
+
+            {/* Estilista */}
+            <Col xs={12}>
+              <FormGroup>
+                <Label>Estilista*</Label>
+                <div className="d-flex gap-2">
+                  <Input type="select" name="stylist_id" onChange={validation.handleChange} value={validation.values.stylist_id} disabled={isLoadingStylists}>
+                    <option value="">{isLoadingStylists ? "Cargando..." : "Seleccione..."}</option>
+
+                    {/* Opción Actual si existe y no está en la lista */}
+                    {validation.values.stylist_id && !sortedStylistsForDropdown.find(s => String(s.id) === String(validation.values.stylist_id)) && (
+                      <option value={validation.values.stylist_id}>{currentStylistLabel}</option>
+                    )}
+
+                    {/* ✅ LISTA ORDENADA CON INDICADORES VISUALES */}
+                    {sortedStylistsForDropdown.map((s) => (
+                      <option
+                        key={s.id}
+                        value={s.id}
+                        className={s.is_busy ? "text-danger bg-light fw-bold" : "text-success fw-bold"}
                       >
-                        <option value="">
-                          {clients.length ? "Seleccione…" : "Cargando…"}
-                        </option>
-
-                        {clientMissing && validation.values.client_id && (
-                          <option value={validation.values.client_id}>
-                            {currentClientLabel}
-                          </option>
-                        )}
-
-                        {clients.map((c: any) => (
-                          <option key={c.id} value={c.id}>
-                            {c.first_name} {c.last_name}
-                          </option>
-                        ))}
-                      </Input>
-                      {validation.touched.client_id && validation.errors.client_id && (
-                        <FormFeedback className="d-block">
-                          {validation.errors.client_id as string}
-                        </FormFeedback>
-                      )}
-                    </Col>
-                    {!isEditMode && (
-                      <Col md="auto">
-                        <Button
-                          color="secondary"
-                          outline
-                          onClick={() => {
-                            setShowClientModal(true);
-                            setCloseClientModalOnSave(true);
-                          }}
-                          type="button"
-                        >
-                          <i className="ri-add-fill me-1"></i>
-                          Crear nuevo cliente
-                        </Button>
-                      </Col>
-                    )}
-                  </Row>
-                </FormGroup>
-              </Col>
-
-              {/* ================= Servicio ================= */}
-              <Col xs={12}>
-                <FormGroup className="mb-0">
-                  <Label>Servicio*</Label>
-                  <Input
-                    type="select"
-                    name="service_id"
-                    onChange={validation.handleChange}
-                    value={validation.values.service_id}
-                    disabled={!services?.length}
-                  >
-                    <option value="">
-                      {services?.length ? "Seleccione un servicio..." : "Cargando servicios..."}
-                    </option>
-                    {services?.map((s: any) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
+                        {/* Iconos para depurar visualmente */}
+                        {s.is_busy ? `🔴 (Ocupado)` : `🟢 (Libre)`} - {s.first_name} {s.last_name}
                       </option>
                     ))}
                   </Input>
-                </FormGroup>
-              </Col>
 
-              {/* ================= Fecha y Hora ================= */}
-              <Col md={6}>
-                <FormGroup className="mb-0">
-                  <Label>Fecha*</Label>
-                  <Flatpickr
-                    className="form-control"
-                    value={validation.values.date as any}
-                    onChange={([d]) => validation.setFieldValue("date", d)}
-                    options={{
-                      dateFormat: "Y-m-d",
-                      altInput: true,
-                      altFormat: "F j, Y",
-                      minDate: allowPastAppointments ? undefined : "today", // ✅ Condicional según setting
-                    }}
-                  />
-                </FormGroup>
-              </Col>
-              <Col md={6}>
-                <FormGroup className="mb-0">
-                  <Label>Hora*</Label>
-                  <Input
-                    type="select"
-                    name="start_time"
-                    onChange={validation.handleChange}
-                    value={validation.values.start_time}
-                    disabled={isLoadingTimeSlots || !validation.values.date}
-                  >
-                    <option value="">
-                      {isLoadingTimeSlots
-                        ? "Buscando horarios..."
-                        : !validation.values.date
-                        ? "Seleccione fecha..."
-                        : "Seleccione horario..."}
-                    </option>
-                    {timeMissing && (
-                      <option value={validation.values.start_time}>
-                        {validation.values.start_time} (actual)
-                      </option>
-                    )}
-                    {timeSlots.map((time) => (
-                      <option key={time} value={time}>
-                        {time}
-                      </option>
-                    ))}
-                  </Input>
-                </FormGroup>
-              </Col>
+                  <Button color="info" outline onClick={handleSuggestMain} disabled={isSuggestingMain} title="Asignación Inteligente">
+                    {isSuggestingMain ? <Spinner size="sm" /> : <><i className="ri-magic-line me-1"></i>Digiturno</>}
+                  </Button>
+                </div>
+              </FormGroup>
+            </Col>
+          </Row>
 
-              {/* ================= Estilista + Digiturno ================= */}
-              <Col xs={12}>
-                <FormGroup className="mb-0">
-                  <Label>Estilista*</Label>
-                  <div className="d-flex gap-2">
-                    <Input
-                      type="select"
-                      name="stylist_id"
-                      onChange={validation.handleChange}
-                      value={validation.values.stylist_id}
-                      disabled={isLoadingStylists || !validation.values.start_time}
-                    >
-                      <option value="">
-                        {isLoadingStylists ? "Buscando disponibles..." : "Seleccione..."}
-                      </option>
-                      {stylistMissing && validation.values.stylist_id && (
-                        <option value={validation.values.stylist_id}>
-                          {currentStylistLabel || `Estilista`}
-                        </option>
-                      )}
-                      {availableStylists.map((stylist) => (
-                        <option key={stylist.id} value={stylist.id}>
-                          {stylist.first_name} {stylist.last_name}
-                        </option>
-                      ))}
-                    </Input>
-                    <Button
-                      color="info"
-                      outline
-                      onClick={handleSuggestMain}
-                      title="Digiturno (sugerir estilista del turno)"
-                      disabled={isSuggestingMain || !validation.values.start_time}
-                      type="button"
-                    >
-                      {isSuggestingMain ? <Spinner size="sm" /> : "Digiturno"}
-                    </Button>
-                  </div>
-                </FormGroup>
-              </Col>
-
-              {/* ================= Filas Extra ================= */}
-              {!isEditMode && (
-                <>
-                  {extraRows.map((row, idx) => {
-                    const stylistsForThisRow = availableStylistsRows[idx] || [];
-                    const isLoadingThisRow = isLoadingStylistsRows[idx];
-                    const isSuggestingThisRow = isSuggestingRow[idx];
-                    return (
-                      <Col xs={12} key={`extra-row-${idx}`} className="border rounded p-3">
-                        <Row className="g-2 align-items-end">
-                          <Col sm={6}>
-                            <FormGroup className="mb-0">
-                              <Label>Servicio #{idx + 2}</Label>
-                              <Input
-                                type="select"
-                                value={row.service_id}
-                                onChange={(e) => changeExtraRow(idx, "service_id", e.target.value)}
-                              >
-                                <option value="">Seleccione...</option>
-                                {services.map((s: any) => (
-                                  <option key={s.id} value={s.id}>
-                                    {s.name}
-                                  </option>
-                                ))}
-                              </Input>
-                            </FormGroup>
-                          </Col>
-                          <Col sm={6}>
-                            <FormGroup className="mb-0">
-                              <Label>Estilista #{idx + 2}</Label>
-                              <div className="d-flex gap-2">
-                                <Input
-                                  type="select"
-                                  value={row.stylist_id}
-                                  onChange={(e) => changeExtraRow(idx, "stylist_id", e.target.value)}
-                                  disabled={isLoadingThisRow || !row.service_id}
-                                >
-                                  <option value="">{isLoadingThisRow ? "Buscando..." : "Seleccione..."}</option>
-                                  {stylistsForThisRow.map((s) => (
-                                    <option key={s.id} value={s.id}>
-                                      {s.first_name} {s.last_name}
-                                    </option>
-                                  ))}
-                                </Input>
-                                <Button
-                                  color="info"
-                                  outline
-                                  onClick={() => handleSuggestForRow(idx)}
-                                  disabled={isSuggestingThisRow || !row.service_id}
-                                  title="Digiturno para esta fila"
-                                  type="button"
-                                >
-                                  {isSuggestingThisRow ? <Spinner size="sm" /> : <i className="ri-magic-line"></i>}
-                                </Button>
-                                <Button
-                                  color="danger"
-                                  outline
-                                  onClick={() => removeExtraRow(idx)}
-                                  title="Eliminar servicio"
-                                  type="button"
-                                >
-                                  <i className="ri-delete-bin-6-line"></i>
-                                </Button>
-                              </div>
-                            </FormGroup>
-                          </Col>
-                        </Row>
-                      </Col>
-                    );
-                  })}
-
-                  <Col xs={12}>
-                    <Button color="secondary" outline onClick={addExtraRow} type="button">
-                      Añadir otro servicio
-                    </Button>
-                  </Col>
-                </>
-              )}
-            </Row>
-
-            <div className="hstack gap-2 justify-content-end mt-3">
-              <Button type="button" color="light" onClick={onClose}>
-                Cancelar
-              </Button>
-              <Button type="submit" color="success" disabled={!canSubmit}>
-                {validation.isSubmitting ? <Spinner size="sm" /> : isEditMode ? "Guardar Cambios" : "Agendar Cita"}
-              </Button>
-            </div>
-          </Form>
-        </ModalBody>
-      </Modal>
-
-      {/* MODAL PARA CREAR CLIENTE */}
-      <Modal
-        isOpen={showClientModal}
-        toggle={() => {
-          setShowClientModal(false);
-          clientValidation.resetForm();
-          setShowPassword(false);
-          setCloseClientModalOnSave(true);
-        }}
-        centered
-      >
-        <ModalHeader
-          className="bg-primary-subtle p-3"
-          toggle={() => {
-            setShowClientModal(false);
-            clientValidation.resetForm();
-            setShowPassword(false);
-            setCloseClientModalOnSave(true);
-          }}
-        >
-          Crear Nuevo Cliente
-        </ModalHeader>
-
-        <Form onSubmit={clientValidation.handleSubmit}>
-          <ModalBody>
-            <Row className="g-3">
-              <Col md={6}>
-                <Label htmlFor="first_name-field">Nombre*</Label>
-                <Input
-                  id="first_name-field"
-                  name="first_name"
-                  onChange={clientValidation.handleChange}
-                  onBlur={clientValidation.handleBlur}
-                  value={clientValidation.values.first_name}
-                  invalid={!!(clientValidation.touched.first_name && clientValidation.errors.first_name)}
-                />
-                {clientValidation.touched.first_name && clientValidation.errors.first_name && (
-                  <FormFeedback>{clientValidation.errors.first_name as string}</FormFeedback>
-                )}
-              </Col>
-              <Col md={6}>
-                <Label htmlFor="last_name-field">Apellido</Label>
-                <Input
-                  id="last_name-field"
-                  name="last_name"
-                  onChange={clientValidation.handleChange}
-                  onBlur={clientValidation.handleBlur}
-                  value={clientValidation.values.last_name}
-                />
-              </Col>
-              <Col md={12}>
-                <Label htmlFor="email-field">Email*</Label>
-                <Input
-                  id="email-field"
-                  name="email"
-                  type="email"
-                  onChange={clientValidation.handleChange}
-                  onBlur={clientValidation.handleBlur}
-                  value={clientValidation.values.email}
-                  invalid={!!(clientValidation.touched.email && clientValidation.errors.email)}
-                />
-                {clientValidation.touched.email && clientValidation.errors.email && (
-                  <FormFeedback>{clientValidation.errors.email as string}</FormFeedback>
-                )}
-              </Col>
-              <Col md={12}>
-                <Label htmlFor="phone-field">Teléfono</Label>
-                <Input
-                  id="phone-field"
-                  name="phone"
-                  onChange={clientValidation.handleChange}
-                  onBlur={clientValidation.handleBlur}
-                  value={clientValidation.values.phone}
-                />
-              </Col>
-              <Col md={12}>
-                <Label htmlFor="password-field">Contraseña*</Label>
-                <InputGroup>
-                  <Input
-                    id="password-field"
-                    name="password"
-                    type={showPassword ? "text" : "password"}
-                    onChange={clientValidation.handleChange}
-                    onBlur={clientValidation.handleBlur}
-                    value={clientValidation.values.password}
-                    invalid={!!(clientValidation.touched.password && clientValidation.errors.password)}
-                  />
-                  <button
-                    className="btn btn-light"
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
-                    <i className={showPassword ? "ri-eye-off-fill" : "ri-eye-fill"}></i>
-                  </button>
-                  {clientValidation.touched.password && clientValidation.errors.password && (
-                    <FormFeedback>{clientValidation.errors.password as string}</FormFeedback>
-                  )}
-                </InputGroup>
-              </Col>
-            </Row>
-          </ModalBody>
-
-          <ModalFooter className="d-flex justify-content-between">
-            <div className="hstack gap-2">
-              <button
-                type="button"
-                className="btn btn-light"
-                onClick={() => {
-                  setShowClientModal(false);
-                  clientValidation.resetForm();
-                  setShowPassword(false);
-                  setCloseClientModalOnSave(true);
-                }}
-              >
-                Cancelar
-              </button>
-            </div>
-
-            <div className="hstack gap-2">
-              <button
-                type="submit"
-                className="btn btn-success"
-                disabled={clientValidation.isSubmitting}
-              >
-                {clientValidation.isSubmitting ? <Spinner size="sm" /> : "Guardar"}
-              </button>
-            </div>
-          </ModalFooter>
+          <div className="hstack gap-2 justify-content-end mt-4">
+            <Button color="light" onClick={onClose}>Cancelar</Button>
+            <Button type="submit" color="success" disabled={!canSubmit}>Agendar</Button>
+          </div>
         </Form>
-      </Modal>
-    </>
+      </ModalBody>
+    </Modal>
   );
 };
 

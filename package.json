@@ -55,7 +55,9 @@
     "gridjs-react": "^6.1.1",
     "i18next": "^23.15.2",
     "i18next-browser-languagedetector": "^7.2.0",
+    "jimp": "^0.22.12",
     "jwt-decode": "^4.0.0",
+    "lucide-react": "^0.555.0",
     "moment": "^2.29.4",
     "nouislider-react": "^3.4.1",
     "prismjs": "^1.29.0",
@@ -103,11 +105,10 @@
     "yet-another-react-lightbox": "^3.21.6",
     "yup": "^1.4.0"
   },
-   "scripts": {
-    "start": "cross-env PORT=3001 react-scripts start",              
-    "build": "cross-env NODE_ENV=production react-app-rewired build", 
-    "start:prod": "npx serve -s build -l 3001",                      
-
+  "scripts": {
+    "start": "cross-env PORT=3001 react-scripts start",
+    "build": "cross-env NODE_ENV=production react-app-rewired build",
+    "start:prod": "npx serve -s build -l 3001",
     "pm2:init": "pm2 delete frontend || true && pm2 serve build 3001 --spa --name frontend && pm2 save",
     "deploy": "npm run build && pm2 restart frontend"
   },
@@ -131,6 +132,7 @@
   },
   "devDependencies": {
     "@babel/plugin-proposal-private-property-in-object": "^7.21.11",
+    "@types/google.maps": "^3.58.1",
     "@types/lodash": "^4.14.202",
     "@types/react-bootstrap-table2-paginator": "^2.1.5",
     "@types/react-bootstrap-table2-toolkit": "^2.1.12",

@@ -10,6 +10,7 @@ import { tourSteps } from './tourSteps';
 import Header from './Header';
 import Sidebar from './Sidebar';
 import Footer from './Footer';
+import FloatingChat from '../Components/Common/FloatingChat';
 
 //import actions
 import {
@@ -26,23 +27,23 @@ import { createSelector } from 'reselect';
 // Objeto de estilos para el Tour
 const joyrideStyles = {
     options: {
-      zIndex: 10000,
-      primaryColor: '#438eff',
-      arrowColor: '#ffffff',
-      backgroundColor: '#ffffff',
-      textColor: '#555',
+        zIndex: 10000,
+        primaryColor: '#438eff',
+        arrowColor: '#ffffff',
+        backgroundColor: '#ffffff',
+        textColor: '#555',
     },
     tooltip: {
-      borderRadius: '0.5rem',
-      padding: '1rem 1.5rem',
+        borderRadius: '0.5rem',
+        padding: '1rem 1.5rem',
     },
     buttonNext: {
-      borderRadius: '0.25rem',
-      fontSize: '14px',
+        borderRadius: '0.25rem',
+        fontSize: '14px',
     },
     buttonBack: {
-      marginRight: 'auto',
-      borderRadius: '0.25rem',
+        marginRight: 'auto',
+        borderRadius: '0.25rem',
     },
 };
 
@@ -72,6 +73,10 @@ const Layout = (props: any) => {
     const [runTour, setRunTour] = useState(false);
     const location = useLocation();
 
+    // Estado del chat flotante de Asistencia IA
+    const [chatOpen, setChatOpen] = useState(false);
+    const toggleChat = () => setChatOpen(!chatOpen);
+
     useEffect(() => {
         const tourCompleted = localStorage.getItem('settingsTourCompleted');
         if (!tourCompleted && location.pathname === '/settings') {
@@ -89,7 +94,7 @@ const Layout = (props: any) => {
             localStorage.setItem('settingsTourCompleted', 'true');
         }
     };
-    
+
     // --- FUNCIÓN MEJORADA PARA INICIAR EL TOUR MANUALMENTE ---
     const startTour = () => {
         // Primero, navegamos a la página de settings
@@ -128,7 +133,7 @@ const Layout = (props: any) => {
         layoutPositionType, topbarThemeType, leftsidbarSizeType,
         leftSidebarViewType, leftSidebarImageType, sidebarVisibilitytype,
         dispatch]);
-    
+
     const onChangeLayoutMode = (value: any) => {
         if (changeLayoutMode) {
             dispatch(changeLayoutMode(value));
@@ -141,7 +146,7 @@ const Layout = (props: any) => {
         window.addEventListener("scroll", scrollHandler, true);
         return () => window.removeEventListener("scroll", scrollHandler, true);
     }, []);
-    
+
     function scrollNavigation() {
         var scrollup = document.documentElement.scrollTop;
         if (scrollup > 50) {
@@ -186,14 +191,29 @@ const Layout = (props: any) => {
                     headerClass={headerClass}
                     layoutModeType={layoutModeType}
                     onChangeLayoutMode={onChangeLayoutMode} />
-                
+
                 {/* --- Pasamos la función startTour al Sidebar --- */}
                 <Sidebar layoutType={layoutType} startTour={startTour} />
-                
+
                 <div className="main-content">{props.children}
                     <Footer />
                 </div>
             </div>
+
+            {/* Botón flotante de Asistencia IA */}
+            <div className="customizer-setting d-none d-md-block">
+                <button
+                    onClick={toggleChat}
+                    className="btn-info rounded-pill shadow-lg btn btn-icon btn-lg p-2"
+                    title="Asistencia IA"
+                    style={{ border: 'none' }}
+                >
+                    <i className='ri-sparkling-line fs-22'></i>
+                </button>
+            </div>
+
+            {/* Chat flotante de Asistencia IA */}
+            <FloatingChat isOpen={chatOpen} toggle={toggleChat} />
         </React.Fragment>
     );
 };
