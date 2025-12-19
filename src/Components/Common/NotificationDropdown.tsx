@@ -45,10 +45,10 @@ const NotificationDropdown = () => {
         }
     }, []);
 
-    // Usar polling cada 30 segundos para detectar nuevas citas
+    // Usar polling cada 15 segundos para detectar nuevas citas (más reactivo)
     const { notifications, unreadCount, markAsRead, markAllAsRead, refresh } = useNotifications({
         tenantId,
-        pollingInterval: 30000, // 30 segundos
+        pollingInterval: 15000, // 15 segundos - más rápido para detectar nuevas citas
     });
 
     const toggleNotificationDropdown = () => {

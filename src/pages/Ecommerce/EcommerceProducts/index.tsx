@@ -1,15 +1,14 @@
 // Ubicación: src/pages/Ecommerce/EcommerceProducts/index.tsx
+// NUEVO DISEÑO: Estilo Premium Dashboard con efectos visuales modernos
 
 import React, { useEffect, useMemo, useState, ChangeEvent } from "react";
 import {
     Container, UncontrolledDropdown, DropdownToggle, DropdownItem, DropdownMenu,
-    Row, Card, CardHeader, CardBody, Col, Modal, ModalHeader, ModalBody,
+    Row, Card, CardBody, Col, Modal, ModalHeader, ModalBody,
     ModalFooter, Button, Form, Label, Input, Spinner, InputGroup,
-    UncontrolledCollapse, Badge, Pagination, PaginationItem, PaginationLink
+    Badge, Progress, Nav, NavItem, NavLink
 } from "reactstrap";
 import classnames from "classnames";
-import Nouislider from "nouislider-react";
-import "nouislider/distribute/nouislider.css";
 import Swal from 'sweetalert2';
 import CreatableSelect from 'react-select/creatable';
 import CurrencyInput from 'react-currency-input-field';
@@ -43,25 +42,100 @@ const decodeTenantId = (): string | null => {
     } catch { return null; }
 };
 
+// Estilos inline para efectos premium
+const styles = {
+    productCard: {
+        transition: 'all 0.3s ease',
+        cursor: 'pointer',
+        border: 'none',
+        borderRadius: '16px',
+        overflow: 'hidden',
+    },
+    productCardHover: {
+        transform: 'translateY(-8px)',
+        boxShadow: '0 20px 40px rgba(0,0,0,0.15)',
+    },
+    imageContainer: {
+        position: 'relative' as const,
+        height: '200px',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+    },
+    productImage: {
+        width: '100%',
+        height: '100%',
+        objectFit: 'cover' as const,
+        transition: 'transform 0.5s ease',
+    },
+    priceTag: {
+        background: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
+        color: 'white',
+        padding: '8px 16px',
+        borderRadius: '20px',
+        fontWeight: 'bold',
+        fontSize: '1.1rem',
+    },
+    stockBadge: {
+        position: 'absolute' as const,
+        top: '12px',
+        left: '12px',
+        zIndex: 10,
+    },
+    actionOverlay: {
+        position: 'absolute' as const,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(0,0,0,0.7)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '10px',
+        opacity: 0,
+        transition: 'opacity 0.3s ease',
+    },
+    statCard: {
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        borderRadius: '16px',
+        color: 'white',
+        border: 'none',
+    },
+    statCard2: {
+        background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+        borderRadius: '16px',
+        color: 'white',
+        border: 'none',
+    },
+    statCard3: {
+        background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+        borderRadius: '16px',
+        color: 'white',
+        border: 'none',
+    },
+    statCard4: {
+        background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+        borderRadius: '16px',
+        color: 'white',
+        border: 'none',
+    },
+};
+
 const ProductsPage = () => {
-    document.title = "Tienda de Productos | StyleApp";
+    document.title = "Inventario Premium | StyleApp";
     const dispatch: AppDispatch = useDispatch();
-    const { products: allProducts, categories, status, error } = useSelector((state: RootState) => state.products);
+    const { products: allProducts, categories, status } = useSelector((state: RootState) => state.products);
 
-    // Configuración Tenant
     const [canSellToStaff, setCanSellToStaff] = useState(true);
-
-    // Filtros
-    const [activeTab, setActiveTab] = useState<TabKey>("all"); // Filtro de audiencia
+    const [activeTab, setActiveTab] = useState<TabKey>("all");
     const [searchTerm, setSearchTerm] = useState("");
     const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>("all");
-    const [priceRange, setPriceRange] = useState([0, 500000]);
+    const [hoveredCard, setHoveredCard] = useState<string | null>(null);
 
-    // Paginación
-    const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 8;
-
-    // Modales y Forms
+    // Modales
     const [modalOpen, setModalOpen] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
     const [formData, setFormData] = useState<Partial<Product>>({});
@@ -82,63 +156,38 @@ const ProductsPage = () => {
                 const response = await api.get(`/tenants/${tenantId}`);
                 setCanSellToStaff(response.data.products_for_staff_enabled ?? true);
             }
-        } catch (err) {
-            console.error("Error setting:", err);
-            setCanSellToStaff(true);
-        }
+        } catch { setCanSellToStaff(true); }
     };
 
-    // --- Helpers Visuales ---
-    const getStockStatus = (stock: number) => {
-        if (stock <= 0) return { color: "danger", label: "Agotado", icon: "ri-error-warning-line" };
-        if (stock < 5) return { color: "warning", label: "Poco Stock", icon: "ri-alert-line" };
-        return { color: "success", label: "Disponible", icon: "ri-checkbox-circle-line" };
+    // --- Stats ---
+    const stats = useMemo(() => {
+        const total = allProducts.length;
+        const lowStock = allProducts.filter(p => (p.stock || 0) > 0 && (p.stock || 0) < 5).length;
+        const outOfStock = allProducts.filter(p => (p.stock || 0) <= 0).length;
+        const totalValue = allProducts.reduce((acc, p) => acc + ((p.sale_price || 0) * (p.stock || 0)), 0);
+        return { total, lowStock, outOfStock, totalValue };
+    }, [allProducts]);
+
+    const formatCurrency = (amount: number) =>
+        new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(amount);
+
+    const getStockInfo = (stock: number) => {
+        if (stock <= 0) return { color: "danger", label: "Agotado", bg: "bg-danger" };
+        if (stock < 5) return { color: "warning", label: `Solo ${stock}`, bg: "bg-warning" };
+        return { color: "success", label: `${stock} disp.`, bg: "bg-success" };
     };
 
-    const formatCurrency = (amount: number) => {
-        return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(amount);
-    };
-
-    // --- Filtros y Lógica ---
-    const categoryOptions = useMemo(() =>
-        categories.map(cat => ({ value: cat.id, label: cat.name })),
-        [categories]);
+    // --- Filtros ---
+    const categoryOptions = useMemo(() => categories.map(cat => ({ value: cat.id, label: cat.name })), [categories]);
 
     const filteredProducts = useMemo(() => {
         let filtered = [...allProducts];
-
-        // Texto
-        if (searchTerm) {
-            filtered = filtered.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
-        }
-
-        // Audiencia (Tabs visuales)
-        if (activeTab === 'cliente') {
-            filtered = filtered.filter(p => p.audience_type === 'cliente' || p.audience_type === 'ambos');
-        } else if (activeTab === 'estilista') {
-            filtered = filtered.filter(p => p.audience_type === 'estilista' || p.audience_type === 'ambos');
-        }
-
-        // Categoría
-        if (activeCategoryFilter !== "all") {
-            filtered = filtered.filter(p => p.category_id === activeCategoryFilter);
-        }
-
-        // Precio
-        filtered = filtered.filter(p => p.sale_price >= priceRange[0] && p.sale_price <= priceRange[1]);
-
+        if (searchTerm) filtered = filtered.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+        if (activeTab === 'cliente') filtered = filtered.filter(p => p.audience_type === 'cliente' || p.audience_type === 'ambos');
+        if (activeTab === 'estilista') filtered = filtered.filter(p => p.audience_type === 'estilista' || p.audience_type === 'ambos');
+        if (activeCategoryFilter !== "all") filtered = filtered.filter(p => p.category_id === activeCategoryFilter);
         return filtered;
-    }, [allProducts, activeTab, activeCategoryFilter, priceRange, searchTerm]);
-
-    const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
-    const paginatedProducts = useMemo(() => {
-        const startIndex = (currentPage - 1) * itemsPerPage;
-        return filteredProducts.slice(startIndex, startIndex + itemsPerPage);
-    }, [filteredProducts, currentPage, itemsPerPage]);
-
-    // Resets
-    useEffect(() => { setCurrentPage(1); }, [activeTab, activeCategoryFilter, searchTerm, priceRange]);
-
+    }, [allProducts, activeTab, activeCategoryFilter, searchTerm]);
 
     // --- Handlers ---
     const handleAddClick = () => {
@@ -160,28 +209,23 @@ const ProductsPage = () => {
     const handleDeleteClick = (product: Product) => {
         Swal.fire({
             title: '¿Eliminar producto?',
-            text: `Se eliminará "${product.name}" permanentemente.`,
+            text: `"${product.name}" será eliminado permanentemente.`,
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#d33',
-            cancelButtonColor: '#3085d6',
-            confirmButtonText: 'Sí, eliminar',
-            cancelButtonText: 'Cancelar'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                dispatch(deleteExistingProduct(product.id));
-            }
-        });
+            confirmButtonText: 'Eliminar',
+            cancelButtonText: 'Cancelar',
+            background: '#1a1a2e',
+            color: '#fff'
+        }).then((result) => { if (result.isConfirmed) dispatch(deleteExistingProduct(product.id)); });
     };
 
     const handleFormSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        // Lógica de guardado igual a la versión anterior
         if (isEditMode && formData.id) {
             const productDataToUpdate: Partial<Product> = { ...formData };
             delete productDataToUpdate.id;
-            const imageUploadPromise = selectedImageFile ? dispatch(uploadProductImage({ id: formData.id, imageFile: selectedImageFile })) : Promise.resolve();
-            await imageUploadPromise;
+            if (selectedImageFile) await dispatch(uploadProductImage({ id: formData.id, imageFile: selectedImageFile }));
             dispatch(updateExistingProduct({ id: formData.id, productData: productDataToUpdate }));
         } else {
             const productData: Omit<Product, 'id' | 'image_url'> = {
@@ -214,134 +258,235 @@ const ProductsPage = () => {
         <React.Fragment>
             <div className="page-content">
                 <Container fluid>
-                    <BreadCrumb title="Tienda de Productos" pageTitle="Inventario" />
+                    <BreadCrumb title="Inventario" pageTitle="Productos" />
 
-                    <Row>
-                        <Col lg={12}>
-                            <Card>
-                                <CardHeader className="border-0">
+                    {/* --- Stats Cards con Gradientes --- */}
+                    <Row className="mb-4">
+                        <Col xl={3} md={6}>
+                            <Card style={styles.statCard} className="card-animate">
+                                <CardBody>
                                     <div className="d-flex align-items-center">
-                                        <h5 className="card-title mb-0 fw-semibold flex-grow-1">Catálogo de Productos</h5>
-                                        <div className="flex-shrink-0 d-flex gap-2">
-                                            <Button color="primary" onClick={handleAddClick}>
-                                                <i className="ri-add-line align-bottom me-1"></i> Agregar Producto
-                                            </Button>
-                                            <Button color="success" id="filter-collapse" onClick={() => document.getElementById('collapseExample')?.classList.toggle('show')}>
-                                                <i className="ri-filter-2-line align-bottom"></i> Filtros
-                                            </Button>
+                                        <div className="avatar-sm flex-shrink-0">
+                                            <span className="avatar-title bg-white bg-opacity-25 rounded-circle fs-2">
+                                                📦
+                                            </span>
+                                        </div>
+                                        <div className="flex-grow-1 ms-3">
+                                            <p className="text-white-50 mb-1 text-uppercase fs-12">Total Productos</p>
+                                            <h3 className="mb-0 text-white">{stats.total}</h3>
                                         </div>
                                     </div>
-
-                                    <UncontrolledCollapse toggler="#filter-collapse" defaultOpen>
-                                        <Row className="row-cols-xxl-4 row-cols-lg-3 row-cols-md-2 row-cols-1 mt-3 g-3">
-                                            <Col>
-                                                <h6 className="text-uppercase fs-12 mb-2">Buscar</h6>
-                                                <div className="position-relative">
-                                                    <Input type="text" className="form-control" placeholder="Nombre del producto..."
-                                                        value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-                                                    <i className="ri-search-line search-icon position-absolute top-50 translate-middle-y end-0 me-3"></i>
-                                                </div>
-                                            </Col>
-                                            <Col>
-                                                <h6 className="text-uppercase fs-12 mb-2">Categoría</h6>
-                                                <Input type="select" className="form-select" value={activeCategoryFilter} onChange={(e) => setActiveCategoryFilter(e.target.value)}>
-                                                    <option value="all">Todas las Categorías</option>
-                                                    {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
-                                                </Input>
-                                            </Col>
-                                            <Col>
-                                                <h6 className="text-uppercase fs-12 mb-2">Audiencia</h6>
-                                                <Input type="select" className="form-select" value={activeTab} onChange={(e) => setActiveTab(e.target.value as TabKey)}>
-                                                    <option value="all">Todo</option>
-                                                    <option value="cliente">Venta a Clientes</option>
-                                                    <option value="estilista">Uso Interno/Profesional</option>
-                                                </Input>
-                                            </Col>
-                                            <Col>
-                                                <h6 className="text-uppercase fs-12 mb-2">Rango de Precio</h6>
-                                                <Nouislider range={{ min: 0, max: 500000 }} start={priceRange} connect step={5000}
-                                                    onSlide={(vals) => setPriceRange(vals.map(Number))} />
-                                                <div className="d-flex justify-content-between mt-2">
-                                                    <span className="text-muted small">{formatCurrency(priceRange[0])}</span>
-                                                    <span className="text-muted small">{formatCurrency(priceRange[1])}</span>
-                                                </div>
-                                            </Col>
-                                        </Row>
-                                    </UncontrolledCollapse>
-                                </CardHeader>
+                                </CardBody>
+                            </Card>
+                        </Col>
+                        <Col xl={3} md={6}>
+                            <Card style={styles.statCard2} className="card-animate">
+                                <CardBody>
+                                    <div className="d-flex align-items-center">
+                                        <div className="avatar-sm flex-shrink-0">
+                                            <span className="avatar-title bg-white bg-opacity-25 rounded-circle fs-2">
+                                                ⚠️
+                                            </span>
+                                        </div>
+                                        <div className="flex-grow-1 ms-3">
+                                            <p className="text-white-50 mb-1 text-uppercase fs-12">Poco Stock</p>
+                                            <h3 className="mb-0 text-white">{stats.lowStock}</h3>
+                                        </div>
+                                    </div>
+                                </CardBody>
+                            </Card>
+                        </Col>
+                        <Col xl={3} md={6}>
+                            <Card style={styles.statCard3} className="card-animate">
+                                <CardBody>
+                                    <div className="d-flex align-items-center">
+                                        <div className="avatar-sm flex-shrink-0">
+                                            <span className="avatar-title bg-white bg-opacity-25 rounded-circle fs-2">
+                                                ❌
+                                            </span>
+                                        </div>
+                                        <div className="flex-grow-1 ms-3">
+                                            <p className="text-white-50 mb-1 text-uppercase fs-12">Agotados</p>
+                                            <h3 className="mb-0 text-white">{stats.outOfStock}</h3>
+                                        </div>
+                                    </div>
+                                </CardBody>
+                            </Card>
+                        </Col>
+                        <Col xl={3} md={6}>
+                            <Card style={styles.statCard4} className="card-animate">
+                                <CardBody>
+                                    <div className="d-flex align-items-center">
+                                        <div className="avatar-sm flex-shrink-0">
+                                            <span className="avatar-title bg-white bg-opacity-25 rounded-circle fs-2">
+                                                💰
+                                            </span>
+                                        </div>
+                                        <div className="flex-grow-1 ms-3">
+                                            <p className="text-white-50 mb-1 text-uppercase fs-12">Valor Inventario</p>
+                                            <h3 className="mb-0 text-white fs-5">{formatCurrency(stats.totalValue)}</h3>
+                                        </div>
+                                    </div>
+                                </CardBody>
                             </Card>
                         </Col>
                     </Row>
 
-                    {/* --- Grid de Productos --- */}
+                    {/* --- Header con Filtros y Búsqueda --- */}
+                    <Card className="mb-4" style={{ borderRadius: '16px', border: 'none' }}>
+                        <CardBody>
+                            <Row className="g-3 align-items-center">
+                                <Col lg={4}>
+                                    <div className="search-box">
+                                        <Input
+                                            type="text"
+                                            className="form-control form-control-lg bg-light border-0"
+                                            placeholder="🔍 Buscar productos..."
+                                            value={searchTerm}
+                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                            style={{ borderRadius: '12px' }}
+                                        />
+                                    </div>
+                                </Col>
+                                <Col lg={3}>
+                                    <Input
+                                        type="select"
+                                        className="form-select form-select-lg bg-light border-0"
+                                        value={activeCategoryFilter}
+                                        onChange={(e) => setActiveCategoryFilter(e.target.value)}
+                                        style={{ borderRadius: '12px' }}
+                                    >
+                                        <option value="all">🏷️ Todas las Categorías</option>
+                                        {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+                                    </Input>
+                                </Col>
+                                <Col lg={3}>
+                                    <Nav pills className="nav-pills-custom">
+                                        <NavItem>
+                                            <NavLink className={classnames({ active: activeTab === 'all' })} onClick={() => setActiveTab('all')} style={{ cursor: 'pointer' }}>
+                                                Todos
+                                            </NavLink>
+                                        </NavItem>
+                                        <NavItem>
+                                            <NavLink className={classnames({ active: activeTab === 'cliente' })} onClick={() => setActiveTab('cliente')} style={{ cursor: 'pointer' }}>
+                                                Clientes
+                                            </NavLink>
+                                        </NavItem>
+                                        {canSellToStaff && (
+                                            <NavItem>
+                                                <NavLink className={classnames({ active: activeTab === 'estilista' })} onClick={() => setActiveTab('estilista')} style={{ cursor: 'pointer' }}>
+                                                    Staff
+                                                </NavLink>
+                                            </NavItem>
+                                        )}
+                                    </Nav>
+                                </Col>
+                                <Col lg={2} className="text-end">
+                                    <Button
+                                        color="primary"
+                                        size="lg"
+                                        onClick={handleAddClick}
+                                        style={{ borderRadius: '12px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', border: 'none' }}
+                                    >
+                                        <i className="ri-add-line me-1"></i> Nuevo
+                                    </Button>
+                                </Col>
+                            </Row>
+                        </CardBody>
+                    </Card>
+
+                    {/* --- Grid de Productos Premium --- */}
                     <Row>
                         {status === 'loading' ? (
-                            <Col xs={12} className="text-center py-5"><Spinner color="primary" /></Col>
-                        ) : paginatedProducts.length > 0 ? (
-                            paginatedProducts.map((product) => {
-                                const stockInfo = getStockStatus(product.stock);
+                            <Col xs={12} className="text-center py-5">
+                                <Spinner color="primary" style={{ width: '3rem', height: '3rem' }} />
+                                <p className="mt-3 text-muted">Cargando productos...</p>
+                            </Col>
+                        ) : filteredProducts.length > 0 ? (
+                            filteredProducts.map((product) => {
+                                const stockInfo = getStockInfo(product.stock || 0);
+                                const isHovered = hoveredCard === product.id;
                                 return (
-                                    <Col key={product.id} xxl={3} lg={4} md={6}>
-                                        <Card className="explore-box card-animate border-0 shadow-sm overflow-hidden">
-                                            <div className="position-relative">
+                                    <Col key={product.id} xxl={3} xl={4} lg={4} md={6} className="mb-4">
+                                        <Card
+                                            style={{
+                                                ...styles.productCard,
+                                                ...(isHovered ? styles.productCardHover : {}),
+                                                boxShadow: isHovered ? '0 20px 40px rgba(0,0,0,0.15)' : '0 4px 15px rgba(0,0,0,0.08)',
+                                            }}
+                                            onMouseEnter={() => setHoveredCard(product.id)}
+                                            onMouseLeave={() => setHoveredCard(null)}
+                                        >
+                                            {/* Imagen con Overlay */}
+                                            <div style={styles.imageContainer}>
+                                                <Badge
+                                                    color={stockInfo.color}
+                                                    style={styles.stockBadge}
+                                                    className="px-3 py-2 fs-12"
+                                                >
+                                                    {stockInfo.label}
+                                                </Badge>
+
                                                 <img
-                                                    src={product.image_url ? `${BACKEND_URL}${product.image_url}` : "https://www.shutterstock.com/image-vector/default-ui-image-placeholder-wireframes-600nw-1037719192.jpg"}
+                                                    src={product.image_url ? `${BACKEND_URL}${product.image_url}` : "https://via.placeholder.com/300x200/667eea/ffffff?text=Sin+Imagen"}
                                                     alt={product.name}
-                                                    className="card-img-top explore-img"
-                                                    style={{ height: "220px", objectFit: "cover", width: "100%" }}
-                                                    onError={(e) => { e.currentTarget.src = "https://www.shutterstock.com/image-vector/default-ui-image-placeholder-wireframes-600nw-1037719192.jpg"; }}
+                                                    style={{
+                                                        ...styles.productImage,
+                                                        transform: isHovered ? 'scale(1.1)' : 'scale(1)',
+                                                    }}
+                                                    onError={(e) => { e.currentTarget.src = "https://via.placeholder.com/300x200/667eea/ffffff?text=Sin+Imagen"; }}
                                                 />
-                                                <div className="position-absolute top-0 start-0 m-2">
-                                                    <Badge color={stockInfo.color} className="fs-11">
-                                                        <i className={`${stockInfo.icon} me-1`}></i> {stockInfo.label}: {product.stock}
-                                                    </Badge>
-                                                </div>
+
                                                 {/* Action Buttons Overlay */}
-                                                <div className="explore-place-bid-img">
-                                                    <div className="d-flex gap-2 justify-content-center h-100 align-items-center bg-dark bg-opacity-25" style={{ backdropFilter: "blur(2px)" }}>
-                                                        <Button size="sm" color="light" onClick={() => handleEditClick(product)}>
-                                                            <i className="ri-pencil-fill text-muted align-bottom me-1"></i> Editar
-                                                        </Button>
-                                                        <Button size="sm" color="danger" onClick={() => handleDeleteClick(product)}>
-                                                            <i className="ri-delete-bin-fill align-bottom"></i>
-                                                        </Button>
-                                                    </div>
+                                                <div style={{
+                                                    ...styles.actionOverlay,
+                                                    opacity: isHovered ? 1 : 0,
+                                                }}>
+                                                    <Button color="light" className="rounded-circle" onClick={() => handleEditClick(product)}>
+                                                        <i className="ri-edit-2-line fs-18"></i>
+                                                    </Button>
+                                                    <Button color="danger" className="rounded-circle" onClick={() => handleDeleteClick(product)}>
+                                                        <i className="ri-delete-bin-line fs-18"></i>
+                                                    </Button>
                                                 </div>
                                             </div>
 
-                                            <CardBody>
-                                                <div className="mb-2">
-                                                    <h5 className="mb-1 text-truncate"><Link to="#" onClick={(e) => { e.preventDefault(); handleEditClick(product); }} className="text-dark">{product.name}</Link></h5>
-                                                    <p className="text-muted fs-13 mb-0">{product.category_name || "Sin Categoría"}</p>
-                                                </div>
-
-                                                <div className="d-flex align-items-end justify-content-between mt-3">
+                                            <CardBody className="p-4">
+                                                <div className="d-flex justify-content-between align-items-start mb-2">
                                                     <div>
-                                                        <p className="text-muted fs-11 text-uppercase mb-1 fw-medium">Precio Venta</p>
-                                                        <h5 className="fs-16 text-primary mb-0">{formatCurrency(product.sale_price || 0)}</h5>
+                                                        <h5 className="mb-1 text-truncate" style={{ maxWidth: '180px' }}>
+                                                            {product.name}
+                                                        </h5>
+                                                        <p className="text-muted fs-12 mb-0">
+                                                            {product.category_name || 'Sin Categoría'}
+                                                        </p>
                                                     </div>
-                                                    {canSellToStaff && (
-                                                        <div className="text-end">
-                                                            <p className="text-muted fs-11 text-uppercase mb-1 fw-medium">Interno</p>
-                                                            <h6 className="fs-14 text-secondary mb-0">{formatCurrency(product.staff_price || 0)}</h6>
-                                                        </div>
-                                                    )}
+                                                    <span style={styles.priceTag}>
+                                                        {formatCurrency(product.sale_price || 0)}
+                                                    </span>
                                                 </div>
 
-                                                {/* Progress bar visual for stock */}
+                                                {/* Stock Progress */}
                                                 <div className="mt-3">
                                                     <div className="d-flex justify-content-between mb-1">
-                                                        <span className="text-muted fs-11">Disponibilidad</span>
-                                                        <span className="text-muted fs-11">{product.stock} unid.</span>
+                                                        <span className="text-muted fs-11">Stock</span>
+                                                        <span className="fw-medium">{product.stock || 0} unidades</span>
                                                     </div>
-                                                    <div className="progress progress-sm rounded-pill">
-                                                        <div
-                                                            className={`progress-bar bg-${stockInfo.color}`}
-                                                            role="progressbar"
-                                                            style={{ width: `${Math.min(100, (product.stock / 20) * 100)}%` }}
-                                                        ></div>
-                                                    </div>
+                                                    <Progress
+                                                        value={Math.min(100, ((product.stock || 0) / 20) * 100)}
+                                                        color={stockInfo.color}
+                                                        style={{ height: '6px', borderRadius: '3px' }}
+                                                    />
                                                 </div>
+
+                                                {canSellToStaff && (
+                                                    <div className="mt-3 pt-3 border-top">
+                                                        <div className="d-flex justify-content-between">
+                                                            <span className="text-muted fs-12">Precio Staff</span>
+                                                            <span className="text-primary fw-medium">{formatCurrency(product.staff_price || 0)}</span>
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </CardBody>
                                         </Card>
                                     </Col>
@@ -349,50 +494,34 @@ const ProductsPage = () => {
                             })
                         ) : (
                             <Col xs={12}>
-                                <div className="text-center py-5">
-                                    <div className="avatar-lg mx-auto mb-3">
-                                        <div className="avatar-title bg-light text-primary rounded-circle fs-1">
-                                            <i className="ri-shopping-bag-3-line"></i>
-                                        </div>
-                                    </div>
-                                    <h5>No se encontraron productos</h5>
-                                    <p className="text-muted">Intenta ajustar los filtros de búsqueda</p>
-                                </div>
+                                <Card className="text-center py-5" style={{ borderRadius: '16px', border: 'none' }}>
+                                    <CardBody>
+                                        <div style={{ fontSize: '4rem' }}>📦</div>
+                                        <h4 className="mt-3">No hay productos</h4>
+                                        <p className="text-muted">Agrega tu primer producto para comenzar</p>
+                                        <Button color="primary" onClick={handleAddClick} style={{ borderRadius: '12px' }}>
+                                            <i className="ri-add-line me-1"></i> Agregar Producto
+                                        </Button>
+                                    </CardBody>
+                                </Card>
                             </Col>
                         )}
                     </Row>
 
-                    {/* Paginación */}
-                    {paginatedProducts.length > 0 && totalPages > 1 && (
-                        <Row className="justify-content-center mb-4">
-                            <Pagination>
-                                <PaginationItem disabled={currentPage === 1}>
-                                    <PaginationLink previous onClick={() => setCurrentPage(p => Math.max(1, p - 1))} />
-                                </PaginationItem>
-                                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                                    <PaginationItem key={page} active={currentPage === page}>
-                                        <PaginationLink onClick={() => setCurrentPage(page)}>{page}</PaginationLink>
-                                    </PaginationItem>
-                                ))}
-                                <PaginationItem disabled={currentPage === totalPages}>
-                                    <PaginationLink next onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} />
-                                </PaginationItem>
-                            </Pagination>
-                        </Row>
-                    )}
-
-                    {/* --- Modales --- */}
+                    {/* --- Modal Producto --- */}
                     <Modal isOpen={modalOpen} toggle={() => setModalOpen(false)} centered size="lg">
-                        <ModalHeader toggle={() => setModalOpen(false)}>{isEditMode ? 'Editar Producto' : 'Nuevo Producto'}</ModalHeader>
+                        <ModalHeader toggle={() => setModalOpen(false)} className="bg-primary text-white">
+                            {isEditMode ? '✏️ Editar Producto' : '➕ Nuevo Producto'}
+                        </ModalHeader>
                         <Form onSubmit={handleFormSubmit}>
                             <ModalBody>
                                 <Row>
                                     <Col md={8} className="mb-3">
-                                        <Label>Nombre del Producto</Label>
-                                        <Input required value={formData.name || ''} onChange={e => setFormData(p => ({ ...p, name: e.target.value }))} placeholder="Ej: Shampoo Keratina 500ml" />
+                                        <Label className="fw-medium">Nombre del Producto</Label>
+                                        <Input required value={formData.name || ''} onChange={e => setFormData(p => ({ ...p, name: e.target.value }))} placeholder="Ej: Shampoo Keratina 500ml" className="border-0 bg-light" />
                                     </Col>
                                     <Col md={4} className="mb-3">
-                                        <Label>Categoría</Label>
+                                        <Label className="fw-medium">Categoría</Label>
                                         <div className="d-flex gap-2">
                                             <div className="flex-grow-1">
                                                 <CreatableSelect
@@ -407,34 +536,34 @@ const ProductsPage = () => {
                                     </Col>
 
                                     <Col md={4} className="mb-3">
-                                        <Label className="text-primary fw-medium">Precio Venta (Público)</Label>
-                                        <CurrencyInput className="form-control" value={formData.sale_price} onValueChange={(val) => setFormData(p => ({ ...p, sale_price: Number(val) }))} prefix="$ " groupSeparator="." decimalsLimit={0} />
+                                        <Label className="fw-medium text-success">💰 Precio Venta</Label>
+                                        <CurrencyInput className="form-control bg-light border-0" value={formData.sale_price} onValueChange={(val) => setFormData(p => ({ ...p, sale_price: Number(val) }))} prefix="$ " groupSeparator="." decimalsLimit={0} />
                                     </Col>
                                     {canSellToStaff && (
                                         <>
                                             <Col md={4} className="mb-3">
-                                                <Label className="text-secondary fw-medium">Precio Interno (Staff)</Label>
-                                                <CurrencyInput className="form-control" value={formData.staff_price} onValueChange={(val) => setFormData(p => ({ ...p, staff_price: Number(val) }))} prefix="$ " groupSeparator="." decimalsLimit={0} />
+                                                <Label className="fw-medium text-primary">👤 Precio Staff</Label>
+                                                <CurrencyInput className="form-control bg-light border-0" value={formData.staff_price} onValueChange={(val) => setFormData(p => ({ ...p, staff_price: Number(val) }))} prefix="$ " groupSeparator="." decimalsLimit={0} />
                                             </Col>
                                             <Col md={4} className="mb-3">
-                                                <Label>Comisión Staff (%)</Label>
-                                                <Input type="number" min="0" max="100" value={formData.product_commission_percent || ''} onChange={e => setFormData(p => ({ ...p, product_commission_percent: Number(e.target.value) }))} />
+                                                <Label className="fw-medium">% Comisión</Label>
+                                                <Input type="number" className="bg-light border-0" min="0" max="100" value={formData.product_commission_percent || ''} onChange={e => setFormData(p => ({ ...p, product_commission_percent: Number(e.target.value) }))} />
                                             </Col>
                                         </>
                                     )}
 
                                     <Col md={4} className="mb-3">
-                                        <Label>Costo Base</Label>
-                                        <CurrencyInput className="form-control" value={formData.cost_price} onValueChange={(val) => setFormData(p => ({ ...p, cost_price: Number(val) }))} prefix="$ " groupSeparator="." decimalsLimit={0} />
+                                        <Label className="fw-medium">💵 Costo</Label>
+                                        <CurrencyInput className="form-control bg-light border-0" value={formData.cost_price} onValueChange={(val) => setFormData(p => ({ ...p, cost_price: Number(val) }))} prefix="$ " groupSeparator="." decimalsLimit={0} />
                                     </Col>
                                     <Col md={4} className="mb-3">
-                                        <Label>Stock Disponible</Label>
-                                        <Input type="number" required value={formData.stock || ''} onChange={e => setFormData(p => ({ ...p, stock: Number(e.target.value) }))} />
+                                        <Label className="fw-medium">📦 Stock</Label>
+                                        <Input type="number" className="bg-light border-0" required value={formData.stock || ''} onChange={e => setFormData(p => ({ ...p, stock: Number(e.target.value) }))} />
                                     </Col>
                                     {canSellToStaff && (
                                         <Col md={4} className="mb-3">
-                                            <Label>Disponible Para</Label>
-                                            <Input type="select" value={formData.audience_type || 'cliente'} onChange={(e) => setFormData(p => ({ ...p, audience_type: e.target.value as any }))}>
+                                            <Label className="fw-medium">🎯 Audiencia</Label>
+                                            <Input type="select" className="bg-light border-0" value={formData.audience_type || 'cliente'} onChange={(e) => setFormData(p => ({ ...p, audience_type: e.target.value as any }))}>
                                                 <option value="cliente">Solo Clientes</option>
                                                 <option value="estilista">Solo Staff</option>
                                                 <option value="ambos">Ambos</option>
@@ -442,19 +571,27 @@ const ProductsPage = () => {
                                         </Col>
                                     )}
 
-                                    <Col md={12} className="mb-3"><Label>Descripción</Label><Input type="textarea" rows={3} value={formData.description || ''} onChange={e => setFormData(p => ({ ...p, description: e.target.value }))} /></Col>
                                     <Col md={12} className="mb-3">
-                                        <Label>Imagen del Producto</Label>
-                                        <Input type="file" accept="image/*" onChange={handleFileChange} />
+                                        <Label className="fw-medium">📝 Descripción</Label>
+                                        <Input type="textarea" className="bg-light border-0" rows={2} value={formData.description || ''} onChange={e => setFormData(p => ({ ...p, description: e.target.value }))} />
+                                    </Col>
+                                    <Col md={12} className="mb-3">
+                                        <Label className="fw-medium">📷 Imagen</Label>
+                                        <Input type="file" className="bg-light border-0" accept="image/*" onChange={handleFileChange} />
                                         {(imagePreview || formData.image_url) && (
-                                            <div className="mt-2 text-center p-2 border rounded bg-light">
-                                                <img src={imagePreview || (formData.image_url ? `${BACKEND_URL}${formData.image_url}` : '')} alt="Previsualización" style={{ maxHeight: "150px", objectFit: "contain" }} />
+                                            <div className="mt-2 text-center p-3 bg-light rounded">
+                                                <img src={imagePreview || (formData.image_url ? `${BACKEND_URL}${formData.image_url}` : '')} alt="Preview" style={{ maxHeight: "120px", borderRadius: '12px' }} />
                                             </div>
                                         )}
                                     </Col>
                                 </Row>
                             </ModalBody>
-                            <ModalFooter><Button color="light" onClick={() => setModalOpen(false)}>Cancelar</Button><Button color="primary" type="submit">Guardar Producto</Button></ModalFooter>
+                            <ModalFooter>
+                                <Button color="light" onClick={() => setModalOpen(false)}>Cancelar</Button>
+                                <Button color="primary" type="submit" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', border: 'none' }}>
+                                    💾 Guardar
+                                </Button>
+                            </ModalFooter>
                         </Form>
                     </Modal>
 
