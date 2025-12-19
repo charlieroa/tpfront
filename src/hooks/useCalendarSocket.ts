@@ -1,66 +1,79 @@
 // src/hooks/useCalendarSocket.ts
-// MODIFICADO: Ahora usa polling en vez de WebSocket para mayor confiabilidad
-import { useEffect, useRef } from "react";
-import { api } from "../services/api";
+// Implementación con WebSocket REAL usando Socket.IO
+import { useEffect, useRef, useCallback } from "react";
+import { io, Socket } from "socket.io-client";
 
 type Params = {
-  socketUrl?: string; // Ya no se usa, mantenido por compatibilidad
   tenantId: string | number | undefined;
-  token?: string;
   onAnyChange: (payload: { type: "created" | "updated" | "status"; data: any }) => void;
-  pollingInterval?: number; // En milisegundos, por defecto 30 segundos
 };
 
-export default function useCalendarSocket({
-  tenantId,
-  onAnyChange,
-  pollingInterval = 30000
-}: Params) {
-  const lastCheckRef = useRef<Date>(new Date());
-  const seenIdsRef = useRef<Set<string>>(new Set());
+export default function useCalendarSocket({ tenantId, onAnyChange }: Params) {
+  const socketRef = useRef<Socket | null>(null);
+  const onAnyChangeRef = useRef(onAnyChange);
+
+  // Mantener la referencia actualizada
+  useEffect(() => {
+    onAnyChangeRef.current = onAnyChange;
+  }, [onAnyChange]);
 
   useEffect(() => {
     if (!tenantId) return;
 
-    console.log(`🔄 [CALENDAR POLLING] Iniciando polling cada ${pollingInterval / 1000}s para tenant ${tenantId}`);
+    const wsUrl = process.env.REACT_APP_API_WS_URL || "http://localhost:3005";
 
-    const checkForNewAppointments = async () => {
-      try {
-        const response = await api.get(`/appointments/recent/${tenantId}?minutes=2`);
-        const appointments = response.data.appointments || [];
+    console.log(`🔌 [SOCKET] Conectando a ${wsUrl} para tenant ${tenantId}...`);
 
-        const lastCheck = lastCheckRef.current;
-        let hasChanges = false;
+    // Crear conexión Socket.IO
+    const socket = io(wsUrl, {
+      transports: ["websocket", "polling"],
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      timeout: 20000,
+    });
 
-        appointments.forEach((apt: any) => {
-          const createdAt = new Date(apt.createdAt);
-          if (createdAt > lastCheck && !seenIdsRef.current.has(apt.id)) {
-            console.log('📅 [CALENDAR POLLING] Nueva cita detectada:', apt);
-            seenIdsRef.current.add(apt.id);
-            hasChanges = true;
-          }
-        });
+    socketRef.current = socket;
 
-        // Si hay cambios, notificar para refrescar el calendario
-        if (hasChanges) {
-          onAnyChange({ type: "created", data: { refresh: true } });
-        }
+    socket.on("connect", () => {
+      console.log(`✅ [SOCKET] Conectado! ID: ${socket.id}`);
+      // Unirse al room del tenant
+      socket.emit("join:tenant", tenantId);
+    });
 
-        lastCheckRef.current = new Date();
-      } catch (error) {
-        console.warn('⚠️ [CALENDAR POLLING] Error:', error);
-      }
-    };
+    socket.on("tenant:joined", (data) => {
+      console.log(`🏠 [SOCKET] Unido al room:`, data);
+    });
 
-    // Verificar inmediatamente
-    checkForNewAppointments();
+    // Escuchar eventos de citas
+    socket.on("appointment:created", (data) => {
+      console.log("📅 [SOCKET] Nueva cita creada:", data);
+      onAnyChangeRef.current({ type: "created", data });
+    });
 
-    // Configurar intervalo
-    const intervalId = setInterval(checkForNewAppointments, pollingInterval);
+    socket.on("appointment:updated", (data) => {
+      console.log("📝 [SOCKET] Cita actualizada:", data);
+      onAnyChangeRef.current({ type: "updated", data });
+    });
 
+    socket.on("appointment:status", (data) => {
+      console.log("🔄 [SOCKET] Estado de cita cambiado:", data);
+      onAnyChangeRef.current({ type: "status", data });
+    });
+
+    socket.on("disconnect", (reason) => {
+      console.log(`⚡ [SOCKET] Desconectado:`, reason);
+    });
+
+    socket.on("connect_error", (error) => {
+      console.error("❌ [SOCKET] Error de conexión:", error.message);
+    });
+
+    // Cleanup al desmontar
     return () => {
-      console.log('🛑 [CALENDAR POLLING] Deteniendo polling');
-      clearInterval(intervalId);
+      console.log("🛑 [SOCKET] Cerrando conexión...");
+      socket.disconnect();
+      socketRef.current = null;
     };
-  }, [tenantId, onAnyChange, pollingInterval]);
+  }, [tenantId]);
 }
