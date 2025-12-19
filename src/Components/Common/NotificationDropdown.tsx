@@ -35,8 +35,8 @@ const formatAppointmentTime = (isoString: string): string => {
 const NotificationDropdown = () => {
     const [isNotificationDropdown, setIsNotificationDropdown] = useState<boolean>(false);
 
-    // Socket URL desde variable de entorno
-    const socketUrl = process.env.REACT_APP_API_URL || 'https://api.tupelukeria.com';
+    // Socket URL desde variable de entorno (sin /api)
+    const socketUrl = process.env.REACT_APP_API_WS_URL || 'https://api.tupelukeria.com';
 
     // Obtener tenantId del storage
     const tenantId = useMemo(() => {
