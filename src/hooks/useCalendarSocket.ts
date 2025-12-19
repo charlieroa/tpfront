@@ -1,35 +1,66 @@
 // src/hooks/useCalendarSocket.ts
-import { useEffect } from "react";
-import { getSocket } from "../sockets/calendarSocket";
+// MODIFICADO: Ahora usa polling en vez de WebSocket para mayor confiabilidad
+import { useEffect, useRef } from "react";
+import { api } from "../services/api";
 
 type Params = {
-  socketUrl: string;
+  socketUrl?: string; // Ya no se usa, mantenido por compatibilidad
   tenantId: string | number | undefined;
-  token?: string; // opcional si luego envías JWT
-  onAnyChange: (payload: { type: "created"|"updated"|"status"; data: any }) => void;
+  token?: string;
+  onAnyChange: (payload: { type: "created" | "updated" | "status"; data: any }) => void;
+  pollingInterval?: number; // En milisegundos, por defecto 30 segundos
 };
 
-export default function useCalendarSocket({ socketUrl, tenantId, token, onAnyChange }: Params) {
+export default function useCalendarSocket({
+  tenantId,
+  onAnyChange,
+  pollingInterval = 30000
+}: Params) {
+  const lastCheckRef = useRef<Date>(new Date());
+  const seenIdsRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
-    if (!socketUrl || !tenantId) return;
+    if (!tenantId) return;
 
-    const s = getSocket({ url: socketUrl, token });
+    console.log(`🔄 [CALENDAR POLLING] Iniciando polling cada ${pollingInterval / 1000}s para tenant ${tenantId}`);
 
-    // Unirse al room del tenant
-    s.emit("join:tenant", String(tenantId));
+    const checkForNewAppointments = async () => {
+      try {
+        const response = await api.get(`/appointments/recent/${tenantId}?minutes=2`);
+        const appointments = response.data.appointments || [];
 
-    const onCreated = (data: any) => onAnyChange({ type: "created", data });
-    const onUpdated = (data: any) => onAnyChange({ type: "updated", data });
-    const onStatus  = (data: any) => onAnyChange({ type: "status",  data });
+        const lastCheck = lastCheckRef.current;
+        let hasChanges = false;
 
-    s.on("appointment:created", onCreated);
-    s.on("appointment:updated", onUpdated);
-    s.on("appointment:status",  onStatus);
+        appointments.forEach((apt: any) => {
+          const createdAt = new Date(apt.createdAt);
+          if (createdAt > lastCheck && !seenIdsRef.current.has(apt.id)) {
+            console.log('📅 [CALENDAR POLLING] Nueva cita detectada:', apt);
+            seenIdsRef.current.add(apt.id);
+            hasChanges = true;
+          }
+        });
+
+        // Si hay cambios, notificar para refrescar el calendario
+        if (hasChanges) {
+          onAnyChange({ type: "created", data: { refresh: true } });
+        }
+
+        lastCheckRef.current = new Date();
+      } catch (error) {
+        console.warn('⚠️ [CALENDAR POLLING] Error:', error);
+      }
+    };
+
+    // Verificar inmediatamente
+    checkForNewAppointments();
+
+    // Configurar intervalo
+    const intervalId = setInterval(checkForNewAppointments, pollingInterval);
 
     return () => {
-      s.off("appointment:created", onCreated);
-      s.off("appointment:updated", onUpdated);
-      s.off("appointment:status",  onStatus);
+      console.log('🛑 [CALENDAR POLLING] Deteniendo polling');
+      clearInterval(intervalId);
     };
-  }, [socketUrl, tenantId, token, onAnyChange]);
+  }, [tenantId, onAnyChange, pollingInterval]);
 }

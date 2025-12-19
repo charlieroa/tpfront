@@ -1,6 +1,6 @@
 // src/hooks/useNotifications.ts
-import { useEffect, useCallback, useState } from "react";
-import { getSocket } from "../sockets/calendarSocket";
+import { useEffect, useCallback, useState, useRef } from "react";
+import { api } from "../services/api";
 
 export interface AppointmentNotification {
     id: string;
@@ -19,33 +19,49 @@ type NotificationsState = {
 };
 
 interface UseNotificationsParams {
-    socketUrl: string;
     tenantId: string | undefined;
-    token?: string;
+    pollingInterval?: number; // En milisegundos, por defecto 30 segundos
 }
 
-export default function useNotifications({ socketUrl, tenantId, token }: UseNotificationsParams) {
+export default function useNotifications({ tenantId, pollingInterval = 30000 }: UseNotificationsParams) {
     const [state, setState] = useState<NotificationsState>({
         notifications: [],
         unreadCount: 0,
     });
+    const seenIdsRef = useRef<Set<string>>(new Set());
+    const lastPollRef = useRef<Date>(new Date());
 
     const addNotification = useCallback((data: any) => {
+        // Evitar duplicados
+        if (seenIdsRef.current.has(data.id)) {
+            return;
+        }
+        seenIdsRef.current.add(data.id);
+
         const notification: AppointmentNotification = {
             id: data.id,
             clientName: data.clientName || 'Cliente',
             stylistName: data.stylistName || 'Estilista',
             serviceName: data.serviceName || 'Servicio',
             startTime: data.startTime,
-            createdVia: data.createdVia || 'web',
-            createdAt: new Date(),
+            createdVia: data.createdVia || 'whatsapp',
+            createdAt: new Date(data.createdAt || Date.now()),
             read: false,
         };
 
         setState(prev => ({
-            notifications: [notification, ...prev.notifications].slice(0, 20), // Máximo 20 notificaciones
+            notifications: [notification, ...prev.notifications].slice(0, 20),
             unreadCount: prev.unreadCount + 1,
         }));
+
+        // Mostrar notificación del navegador si está permitido
+        if (Notification.permission === 'granted') {
+            new Notification('📅 Nueva cita agendada', {
+                body: `${data.clientName} - ${data.serviceName} con ${data.stylistName}`,
+                icon: '/favicon.ico',
+                tag: data.id, // Evita duplicados de notificación del navegador
+            });
+        }
     }, []);
 
     const markAsRead = useCallback((notificationId: string) => {
@@ -70,26 +86,54 @@ export default function useNotifications({ socketUrl, tenantId, token }: UseNoti
         setState({ notifications: [], unreadCount: 0 });
     }, []);
 
+    // Polling para obtener citas recientes
+    const pollRecentAppointments = useCallback(async () => {
+        if (!tenantId) return;
+
+        try {
+            const response = await api.get(`/appointments/recent/${tenantId}?minutes=2`);
+            const appointments = response.data.appointments || [];
+
+            // Solo agregar citas creadas después del último polling
+            const lastPoll = lastPollRef.current;
+            appointments.forEach((apt: any) => {
+                const createdAt = new Date(apt.createdAt);
+                if (createdAt > lastPoll && !seenIdsRef.current.has(apt.id)) {
+                    console.log('📬 [POLLING] Nueva cita detectada:', apt);
+                    addNotification(apt);
+                }
+            });
+
+            lastPollRef.current = new Date();
+        } catch (error) {
+            console.warn('⚠️ [POLLING] Error al consultar citas recientes:', error);
+        }
+    }, [tenantId, addNotification]);
+
+    // Solicitar permiso de notificaciones
     useEffect(() => {
-        if (!socketUrl || !tenantId) return;
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+    }, []);
 
-        const socket = getSocket({ url: socketUrl, token });
+    // Iniciar polling
+    useEffect(() => {
+        if (!tenantId) return;
 
-        // Unirse al room del tenant si no se ha hecho
-        socket.emit("join:tenant", String(tenantId));
+        console.log(`🔄 [POLLING] Iniciando polling de notificaciones cada ${pollingInterval / 1000}s para tenant ${tenantId}`);
 
-        // Escuchar eventos de citas
-        const onAppointmentCreated = (data: any) => {
-            console.log("📬 [NOTIFICATION] Nueva cita creada:", data);
-            addNotification(data);
-        };
+        // Poll inmediatamente al iniciar
+        pollRecentAppointments();
 
-        socket.on("appointment:created", onAppointmentCreated);
+        // Configurar intervalo de polling
+        const intervalId = setInterval(pollRecentAppointments, pollingInterval);
 
         return () => {
-            socket.off("appointment:created", onAppointmentCreated);
+            console.log('🛑 [POLLING] Deteniendo polling de notificaciones');
+            clearInterval(intervalId);
         };
-    }, [socketUrl, tenantId, token, addNotification]);
+    }, [tenantId, pollingInterval, pollRecentAppointments]);
 
     return {
         notifications: state.notifications,
@@ -97,5 +141,6 @@ export default function useNotifications({ socketUrl, tenantId, token }: UseNoti
         markAsRead,
         markAllAsRead,
         clearAll,
+        refresh: pollRecentAppointments, // Permite forzar un refresh manual
     };
 }

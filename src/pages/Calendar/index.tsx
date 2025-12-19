@@ -101,19 +101,19 @@ const Calendar = () => {
     dispatch(fetchTenantSettings());
   }, [dispatch]);
 
-  // Refrescar eventos cuando llegue un cambio por socket
+  // Refrescar eventos cuando llegue un cambio por polling
   const refreshCalendar = useCallback(() => {
     dispatch(onGetCalendarData());
   }, [dispatch]);
 
-  // Conectar sockets para escuchar cambios en tiempo real
-  const socketUrl = process.env.REACT_APP_API_WS_URL || "http://localhost:3000";
+  // Polling para detectar cambios en citas (cada 30 segundos)
   useCalendarSocket({
-    socketUrl,
     tenantId,
     onAnyChange: () => {
+      console.log('🔄 [CALENDAR] Refrescando por polling...');
       refreshCalendar();
     },
+    pollingInterval: 30000, // 30 segundos
   });
 
   const handleDateClick = (arg: any) => {

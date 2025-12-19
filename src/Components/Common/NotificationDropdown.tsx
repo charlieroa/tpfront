@@ -35,9 +35,6 @@ const formatAppointmentTime = (isoString: string): string => {
 const NotificationDropdown = () => {
     const [isNotificationDropdown, setIsNotificationDropdown] = useState<boolean>(false);
 
-    // Socket URL desde variable de entorno (sin /api)
-    const socketUrl = process.env.REACT_APP_API_WS_URL || 'https://api.tupelukeria.com';
-
     // Obtener tenantId del storage
     const tenantId = useMemo(() => {
         try {
@@ -48,9 +45,10 @@ const NotificationDropdown = () => {
         }
     }, []);
 
-    const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications({
-        socketUrl,
+    // Usar polling cada 30 segundos para detectar nuevas citas
+    const { notifications, unreadCount, markAsRead, markAllAsRead, refresh } = useNotifications({
         tenantId,
+        pollingInterval: 30000, // 30 segundos
     });
 
     const toggleNotificationDropdown = () => {
