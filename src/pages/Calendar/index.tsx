@@ -106,14 +106,13 @@ const Calendar = () => {
     dispatch(onGetCalendarData());
   }, [dispatch]);
 
-  // Polling para detectar cambios en citas (cada 30 segundos)
+  // WebSocket para detectar cambios en citas en tiempo real
   useCalendarSocket({
     tenantId,
     onAnyChange: () => {
-      console.log('🔄 [CALENDAR] Refrescando por polling...');
+      console.log('🔄 [CALENDAR] Refrescando por WebSocket...');
       refreshCalendar();
     },
-    pollingInterval: 30000, // 30 segundos
   });
 
   const handleDateClick = (arg: any) => {
