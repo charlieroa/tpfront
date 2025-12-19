@@ -318,12 +318,12 @@ const ProductsPage = () => {
                                                 <div className="d-flex align-items-end justify-content-between mt-3">
                                                     <div>
                                                         <p className="text-muted fs-11 text-uppercase mb-1 fw-medium">Precio Venta</p>
-                                                        <h5 className="fs-16 text-primary mb-0">{formatCurrency(product.sale_price)}</h5>
+                                                        <h5 className="fs-16 text-primary mb-0">{formatCurrency(product.sale_price || 0)}</h5>
                                                     </div>
                                                     {canSellToStaff && (
                                                         <div className="text-end">
                                                             <p className="text-muted fs-11 text-uppercase mb-1 fw-medium">Interno</p>
-                                                            <h6 className="fs-14 text-secondary mb-0">{formatCurrency(product.staff_price)}</h6>
+                                                            <h6 className="fs-14 text-secondary mb-0">{formatCurrency(product.staff_price || 0)}</h6>
                                                         </div>
                                                     )}
                                                 </div>
