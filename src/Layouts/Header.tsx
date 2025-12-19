@@ -135,7 +135,7 @@ const Header = ({ onChangeLayoutMode, layoutModeType, headerClass }: any) => {
                             {/* <WebAppsDropdown /> */}
                             {/* <MyCartDropdown /> */}
                             {/* --- FIN DE COMPONENTES COMENTADOS --- */}
-                            
+
                             {/* FullScreenDropdown */}
                             <FullScreenDropdown />
 
@@ -145,9 +145,9 @@ const Header = ({ onChangeLayoutMode, layoutModeType, headerClass }: any) => {
                                 onChangeLayoutMode={onChangeLayoutMode}
                             />
 
-                            {/* --- COMPONENTE COMENTADO --- */}
-                            {/* <NotificationDropdown /> */}
-                            
+                            {/* NotificationDropdown for real-time appointment notifications */}
+                            <NotificationDropdown />
+
                             {/* ProfileDropdown (Recomendado mantener para el logout) */}
                             <ProfileDropdown />
                         </div>
