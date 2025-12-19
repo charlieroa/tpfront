@@ -23,7 +23,10 @@ import {
   Button,
   InputGroup,
   Offcanvas,
-  OffcanvasBody
+  OffcanvasBody,
+  Pagination,
+  PaginationItem,
+  PaginationLink
 } from "reactstrap";
 import { useSelector, useDispatch } from "react-redux";
 import { createSelector } from "reselect";
@@ -65,6 +68,8 @@ const CrmContacts = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [sideBar, setSideBar] = useState<any>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 6; // 2 filas de 3 tarjetas
 
   useEffect(() => {
     dispatch(getContacts());
@@ -194,6 +199,18 @@ const CrmContacts = () => {
   const isWhatsAppClient = (client: any) => {
     return client?.email?.includes('@whatsapp.temp');
   };
+
+  // Paginación
+  const totalPages = Math.ceil(filteredClients.length / itemsPerPage);
+  const paginatedClients = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredClients.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredClients, currentPage, itemsPerPage]);
+
+  // Reset página cuando cambia la búsqueda
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   // Obtener iniciales del nombre
   const getInitials = (name: string) => {
@@ -347,8 +364,8 @@ const CrmContacts = () => {
           ) : (
             <Row>
               {viewMode === 'grid' ? (
-                // Vista Grid (Tarjetas)
-                filteredClients.map((client: any, index: number) => (
+                // Vista Grid (Tarjetas) - Con paginación
+                paginatedClients.map((client: any, index: number) => (
                   <Col key={client.id || index} xl={3} lg={4} md={6}>
                     <Card className="team-box border shadow-none">
                       <div className={`team-cover bg-${getAvatarColor(client.name)}-subtle`} style={{ height: '80px' }}>
@@ -520,7 +537,7 @@ const CrmContacts = () => {
                 </Col>
               )}
 
-              {filteredClients.length === 0 && (
+              {paginatedClients.length === 0 && (
                 <Col lg={12}>
                   <div className="py-4 text-center">
                     <i className="ri-search-line display-5 text-success"></i>
@@ -533,6 +550,32 @@ const CrmContacts = () => {
                       </Button>
                     )}
                   </div>
+                </Col>
+              )}
+
+              {/* Paginación */}
+              {viewMode === 'grid' && totalPages > 1 && (
+                <Col lg={12}>
+                  <div className="d-flex justify-content-center mt-4">
+                    <Pagination>
+                      <PaginationItem disabled={currentPage === 1}>
+                        <PaginationLink previous onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} />
+                      </PaginationItem>
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                        <PaginationItem key={page} active={page === currentPage}>
+                          <PaginationLink onClick={() => setCurrentPage(page)}>
+                            {page}
+                          </PaginationLink>
+                        </PaginationItem>
+                      ))}
+                      <PaginationItem disabled={currentPage === totalPages}>
+                        <PaginationLink next onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} />
+                      </PaginationItem>
+                    </Pagination>
+                  </div>
+                  <p className="text-center text-muted mt-2">
+                    Mostrando {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, filteredClients.length)} de {filteredClients.length} clientes
+                  </p>
                 </Col>
               )}
             </Row>
