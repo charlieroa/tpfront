@@ -192,7 +192,7 @@ const CrmContacts = () => {
 
   // Determinar si el cliente vino de WhatsApp
   const isWhatsAppClient = (client: any) => {
-    return client.email?.includes('@whatsapp.temp') || client.password_hash === 'whatsapp';
+    return client?.email?.includes('@whatsapp.temp');
   };
 
   // Obtener iniciales del nombre
