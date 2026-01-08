@@ -18,7 +18,12 @@ export default function useCalendarSocket({ tenantId, onAnyChange }: Params) {
   }, [onAnyChange]);
 
   useEffect(() => {
-    if (!tenantId) return;
+    console.log(`🔍 [SOCKET DEBUG] tenantId recibido: "${tenantId}" (type: ${typeof tenantId})`);
+
+    if (!tenantId) {
+      console.log('⚠️ [SOCKET] No hay tenantId, no se conecta WebSocket');
+      return;
+    }
 
     const wsUrl = process.env.REACT_APP_API_WS_URL || "http://localhost:3005";
 
